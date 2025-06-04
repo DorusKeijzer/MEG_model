@@ -16,33 +16,50 @@ def get_dataset_name(file_name_with_dir):
     dataset_name = '_'.join(temp)
     return dataset_name
 
-train_path = "../Final Project data/Intra/train"
+train_path = "../Final Project data/Intra"
 test_path = "../Final Project data/Intra/test"
 
 
 
 
-def preprocess_and_save(path, downsample):
-    data = []
-    label = []
-    for file in os.scandir(path):
-        path = file.path
-        print(f"Processing file: {path}")
-        with h5py.File(path, 'r') as f:
-            dataset_name = get_dataset_name(path)
-            matrix = f.get(dataset_name)[()]
-            matrix = matrix[:, ::downsample]
-            data.append(matrix)
-            label.append(dataset_name.split('_')[0])
+def preprocess_and_save_intra(path, downsample):
+    train = []
+    test = []
+    trainlabel = []
+    testlabel = []
+    for dir in os.scandir(path):
+        if not dir.is_dir():
+            continue
+        for file in os.scandir(dir):
+            path = file.path
+            print(f"Processing file: {path}")
+            with h5py.File(path, 'r') as f:
+                dataset_name = get_dataset_name(path)
+                matrix = f.get(dataset_name)[()]
+                matrix = matrix[:, ::downsample]
+                if path.split('\\')[-2] == "train":
+                    train.append(matrix)
+                    trainlabel.append(dataset_name.split('_')[0])
+                elif path.split('\\')[-2] == "test":
+                    test.append(matrix)
+                    testlabel.append(dataset_name.split('_')[0])
 
-    data = np.array(data)
-    n_samples, h, w = data.shape
-    data_flat = data.reshape(-1, w)
+
+    train = np.array(train)
+    test = np.array(test)
+    n_samples_train, h_train, w_train = train.shape
+    n_samples_test, h_test, w_test = test.shape
+
+    train_flat = train.reshape(-1, w_train)
+    test_flat = test.reshape(-1, w_test)
     scaler = MinMaxScaler()
-    data_scaled = scaler.fit_transform(data_flat)
-    data = data_scaled.reshape(n_samples, h, w)
+    scaler.fit(train_flat)
 
-    return data, label
+    train = scaler.transform(train_flat).reshape(train.shape)
+    test = scaler.transform(test_flat).reshape(test.shape)
+
+
+    return train, trainlabel, test, testlabel
     
             # new_filename = os.path.join(os.getcwd(), 'data/processed_' + dataset_name + '.h5')
             # with h5py.File(new_filename, 'a') as new_f:
@@ -59,8 +76,8 @@ def preprocess_and_save(path, downsample):
 #     print(type(matrix))
 #     print(matrix.shape)
 
-train_X, train_Y = preprocess_and_save(train_path, 10, 50)
-test_X, test_Y = preprocess_and_save(test_path, 10, 50)
+train_X, train_Y, test_X, test_Y= preprocess_and_save_intra(train_path, 10)
+#test_X, test_Y = preprocess_and_save(test_path, 10, 50)
 
 print(f"Train X shape: {train_X.shape}")
 print(np.max(train_X[0]))
