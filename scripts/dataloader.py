@@ -39,10 +39,10 @@ def preprocess_and_save_intra(path, downsample):
                 matrix = matrix[:, ::downsample]
                 if path.split('\\')[-2] == "train":
                     train.append(matrix)
-                    trainlabel.append(dataset_name.split('_')[0])
+                    trainlabel.append(dataset_name)
                 elif path.split('\\')[-2] == "test":
                     test.append(matrix)
-                    testlabel.append(dataset_name.split('_')[0])
+                    testlabel.append(dataset_name)
 
 
     train = np.array(train)
@@ -80,5 +80,5 @@ train_X, train_Y, test_X, test_Y= preprocess_and_save_intra(train_path, 10)
 #test_X, test_Y = preprocess_and_save(test_path, 10, 50)
 
 print(f"Train X shape: {train_X.shape}")
-print(np.max(train_X[0]))
-print(np.max(train_X[1]))
+print(test_Y)
+print(train_Y)
