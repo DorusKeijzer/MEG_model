@@ -12,11 +12,17 @@ class CNNLSTMModel(nn.Module):
         self.num_classes = num_classes
 
         self.conv_layers = nn.ModuleList()
-        in_channels = input_size
-        for out_channels in cnn_channels:
-            self.conv_layers.append(
-                nn.Conv1d(in_channels, out_channels, kernel_size, padding='same'))
-            in_channels = out_channels
+
+        # Convolutional layers
+        self.conv_layers.append(nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(3, 3), stride=1, padding= 'same'))
+        self.conv_layers.append(nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(3, 3), stride=1, padding='same'))
+        self.conv_layers.append(nn.Conv2d(in_channels=64, out_channels=128, kernel_size=(3, 3), stride=1, padding='same'))
+        
+        # Adaptive pooling layer
+        self.adapool = nn.AdaptiveAvgPool2d((4, 4))  # Output size is (4, 4)
+        
+        # Fully connected layers
+        self.fc_cnn = nn.Linear(128 * 4 * 4, 256)  # maybe tune? or add more layers?
 
         self.lstm = nn.LSTM(cnn_channels[-1], lstm_hidden, batch_first=True)
         self.dropout = nn.Dropout(dropout)
@@ -32,9 +38,16 @@ class CNNLSTMModel(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size = x.size(0)
+        
+        #CNN section
         for conv in self.conv_layers:
             x = torch.relu(conv(x))
-        x = x.permute(0, 2, 1)
+        x = self.adapool(x)         
+        x = x.view(batch_size, -1) # Flatten
+        x = self.fc_cnn(x)            # one FC, maybe we need more and/or dropout?
+
+        #LSTM section
+        x = x.permute(0, 2, 1) 
         _, (h_n, _) = self.lstm(x)
         out = self.dropout(h_n[-1])
         return self.fc(out)
