@@ -16,8 +16,7 @@ def get_dataset_name(file_name_with_dir):
     dataset_name = '_'.join(temp)
     return dataset_name
 
-train_path = "../Final Project data/Intra"
-test_path = "../Final Project data/Intra/test"
+path = "../Final Project data/Intra"
 
 
 
@@ -76,7 +75,7 @@ def preprocess_and_save_intra(path, downsample):
 #     print(type(matrix))
 #     print(matrix.shape)
 
-train_X, train_Y, test_X, test_Y= preprocess_and_save_intra(train_path, 10)
+train_X, train_Y, test_X, test_Y= preprocess_and_save_intra(path, 10)
 #test_X, test_Y = preprocess_and_save(test_path, 10, 50)
 
 print(f"Train X shape: {train_X.shape}")
