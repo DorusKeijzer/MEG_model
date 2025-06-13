@@ -14,12 +14,14 @@ class CNNLSTMModel(nn.Module):
         self.conv_layers = nn.ModuleList()
 
         # Convolutional layers
-        self.cnn_l1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(3, 3), stride=1, padding= 'same')
-        self.cnn_l2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(3, 3), stride=1, padding='same')
-        self.cnn_l3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=(3, 3), stride=1, padding='same')
+        self.cnn_l1 = nn.Conv2d(in_channels=1, out_channels=32, kernel_size=(kernel_size, kernel_size), stride=1, padding= 'same')
+        self.cnn_l2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=(kernel_size, kernel_size), stride=1, padding='same')
+        self.adapool_1 = nn.AdaptiveAvgPool2d((8, 8))  # Output size is (8, 8)
+
+        self.cnn_l3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=(kernel_size, kernel_size), stride=1, padding='same')
         
         # Adaptive pooling layer
-        self.adapool = nn.AdaptiveAvgPool2d((4, 4))  # Output size is (4, 4)
+        self.adapool_2 = nn.AdaptiveAvgPool2d((4, 4))  # Output size is (4, 4)
         
         # Fully connected layers
         self.fc_cnn = nn.Linear(128 * 4 * 4, 256)  # maybe tune? or add more layers?
@@ -42,8 +44,9 @@ class CNNLSTMModel(nn.Module):
         #CNN section
         x = self.cnn_l1(x.unsqueeze(1)) 
         x = self.cnn_l2(x)
+        x = self.adapool_1(x)
         x = self.cnn_l3(x)
-        x = self.adapool(x)         
+        x = self.adapool_2(x)         
         x = x.view(batch_size, -1) # Flatten
         x = self.fc_cnn(x)            # one FC, maybe we need more and/or dropout?
 
