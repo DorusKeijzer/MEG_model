@@ -39,19 +39,26 @@ class CNNLSTMModel(nn.Module):
         return f"CNN-LSTM_{self.model_parameters}"
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        batch_size = x.size(0)
-        
-        #CNN section
-        x = self.cnn_l1(x.unsqueeze(1)) 
+        # x shape: (batch_size, seq_len, height, width)
+        batch_size, seq_len, height, width = x.size()
+
+        # Flatten temporal dimension for CNN: (batch_size * seq_len, 1, height, width)
+        x = x.view(batch_size * seq_len, 1, height, width)
+
+        # Apply CNN stack
+        x = self.cnn_l1(x)
         x = self.cnn_l2(x)
         x = self.adapool_1(x)
         x = self.cnn_l3(x)
-        x = self.adapool_2(x)         
-        x = x.view(batch_size, -1) # Flatten
-        x = self.fc_cnn(x)            # one FC, maybe we need more and/or dropout?
+        x = self.adapool_2(x)
+        x = x.view(batch_size * seq_len, -1)  # Flatten
+        x = self.fc_cnn(x)
 
-        #LSTM section
-        x = x.view(batch_size, -1, self.cnn_channels[-1])
+        # Reshape back to sequence format for LSTM: (batch_size, seq_len, features)
+        x = x.view(batch_size, seq_len, -1)
+
+        # Pass through LSTM
         _, (h_n, _) = self.lstm(x)
         out = self.dropout(h_n[-1])
         return self.fc(out)
+
