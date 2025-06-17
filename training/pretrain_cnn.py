@@ -66,7 +66,7 @@ def train_cnn_denoising_autoencoder(
     print("Training complete. Best loss: {:.6f}".format(best_loss))
 
 if __name__ == "__main__":
-    from models.image_models import CNNFrameAutoencoder
+    from models.spatial_models import CNNFrameAutoencoder
     from data.dataloader import get_cnn_pretrain_loader
 
     model = CNNFrameAutoencoder

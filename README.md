@@ -1,1 +1,53 @@
 # MEG_model
+This repo contains code for an ablation study for gauging the benefit of using self-supervised pretraining on MEG brain data. 
+
+## Data and task
+
+This MEG data is preprocessed to respect the temporal structure of the MEG nodes used for obtaining this data, that is: our data is a sequence of 2D MEG images. 
+
+The task is to predict one of four activities based on the MEG data of the brain. 
+
+## Model architecture
+
+Our model architecture consists of a CNN that creates spatial features, which are then fed into an transformer sequence model, which is used for classification. This model is trained in an end-to-end fashion, but we investigate the benefit of self-supervised pretraining in this ablation study.
+
+## Self-supervised pretraining
+
+For the CNN we investigate if it is beneficial to pretraining the model on a denoising task. To this end, we augmented the model with a decoder to form an autoencoder, and trained the model on reconstructing the clean MEG from noisy MEG data. During training, we got rid of the decoder but initialized the model using the weights learned in this reconstruction task. 
+
+...
+
+
+# Getting started
+
+## Data
+Download and unzip the data into  `data/files/`. then run `scripts/process_meg_data.py`, which downsamples and processes the meg data. 
+
+## Poetry 
+We make use of [Poetry](https://python-poetry.org/) to manage dependencies. If you install Poetry you can run each file from the root using.
+
+```bash
+poetry run python <directory>/<python file>.py
+```
+
+Using poetry is not strictly necessary, but if you don't you need to manage your own dependencies.
+
+# subdirectories:
+
+## data/ 
+
+
+Put the downloaded files into `files` and preprocess the data using `scripts/process_meg_data.py`. these processed files will live in this directory.
+
+`dataloader.py` contains data loaders for pretraining tasks as well as classification task training
+
+## results/
+Contains the stored locally obtained model weights in `model_weights` (not saved due to size) as well as plots and logs from training sessions in `runs`.
+
+## scripts/
+Contains a `process_meg_data.py`, which downsamples data and encodes spatial dependencies.
+
+## training/
+Contains scripts for pretraining the CNN and the sequence model, as well as `train.py` which trains a model end to end on the classification task.
+
+
