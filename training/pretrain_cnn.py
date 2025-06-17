@@ -7,12 +7,7 @@ from data.dataloader import get_masked_cnn_pretrain_dataset, get_masked_noisy_cn
 from utils import available_device
 from sys import argv
 
-if len(argv) == 1:
-    lr = 1e-3
-else:
-    lr = float(argv[1]) 
-
-
+lr = 1e-3
 print(f"learning rate is {lr}")
 
 def evaluate(model, val_loader, device=available_device):
