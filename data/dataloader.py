@@ -4,17 +4,20 @@ import numpy as np
 
 # CNN Pretraining Dataset 
 class CNNPretrainDataset(Dataset):
-    """Loads individual samples"""
-    def __init__(self, npy_file):
+    """Loads individual samples, noisy and clean"""
+    def __init__(self, npy_file, noise_std: float = 0.1):
+        self.noise_std = noise_std
         self.data = np.load(npy_file)  
     
     def __len__(self):
         return self.data.shape[0]
     
     def __getitem__(self, idx):
-        frame = self.data[idx]
-        frame_tensor = torch.tensor(frame, dtype=torch.float32).unsqueeze(0)
-        return frame_tensor
+        clean_frame = self.data[idx]
+        frame_tensor = torch.tensor(clean_frame, dtype=torch.float32).unsqueeze(0)
+        noise = torch.randn_like(clean_frame) * self.noise_std
+        noisy_frame = clean_frame + noise
+        return  frame_tensor, noisy_frame
 
 def get_cnn_pretrain_loader(npy_file, batch_size=64, shuffle=True):
     ds = CNNPretrainDataset(npy_file)
