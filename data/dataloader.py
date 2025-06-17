@@ -152,7 +152,7 @@ if __name__ == "__main__":
         for row in range(num_samples):
             clean_img = clean[row].squeeze().cpu().numpy()
             noisy_img = noisy[row].squeeze().cpu().numpy()
-            noise_img = (noisy[row] - clean[row]).squeeze().reshape(20, 21)
+            noise_img = (noisy[row] - clean[row]).squeeze().cpu().numpy()
 
             axs[row, 0].imshow(clean_img, cmap='viridis')
             axs[row, 0].set_title("Clean")
