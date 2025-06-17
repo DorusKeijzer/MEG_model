@@ -13,6 +13,8 @@ Our model architecture consists of a CNN that creates spatial features, which ar
 
 ## Self-supervised pretraining
 
+We want to study the effects of self-supervised pretraining, i.e. training tasks that use unlabeled data, with the intention of this helping the model generalize on the classification task. This way of training has been used to great effect in language tasks. The hope is that learning a representation of the data in this self-supervised fashion allows the model to generalize better to the classification task. 
+
 ### denoising autoencoder
 
 For the CNN we investigate if it is beneficial to pretraining the model on a denoising task. To this end, we augmented the model with a decoder to form an autoencoder, and trained the model on reconstructing the clean MEG from noisy MEG data. During training, we got rid of the decoder but initialized the model using the weights learned in this reconstruction task. We hope that this makes the model robust to noise
@@ -37,9 +39,8 @@ We train models on the classificaton task with each possible combinations of pre
 | 4 |           |                           | x                              |    |
 | 5 | x         | x                         |                                |    |
 | 6 | x         |                           | x                              |    |
-| 7 | x         |                           | x                              |    |
-| 8 |           | x                         | x                              |    |
-| 9 | x         | x                         | x                              |    |
+| 7 |           | x                         | x                              |    |
+| 8 | x         | x                         | x                              |    |
 
 
 # Getting started
