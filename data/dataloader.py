@@ -7,7 +7,7 @@ from utils import noise_mask, available_device
 
 class DenoisingCNNPretrainDataset(Dataset):
     """Loads individual samples, with gaussian noise and clean"""
-    def __init__(self, npy_file, noise_std: float = 0.0001, noise_mask=None):
+    def __init__(self, npy_file, noise_std: float = 0.2, noise_mask=None):
         self.noise_std = noise_std
         self.data = np.load(npy_file, mmap_mode='r')  # lazy loading
         self.length = self.data.shape[0]

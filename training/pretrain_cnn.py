@@ -37,6 +37,10 @@ def train_cnn_denoising_autoencoder(
         running_loss = 0.0
 
         for batch, (clean, noisy) in enumerate(dataloader):
+            if batch == 0 and epoch == 0:
+                print("Clean min/max:", clean.min().item(), clean.max().item())
+                print("Noisy min/max:", noisy.min().item(), noisy.max().item())
+
             noisy = noisy.to(device).float()
             clean = clean.to(device).float()
             optimizer.zero_grad()
@@ -46,10 +50,9 @@ def train_cnn_denoising_autoencoder(
             optimizer.step()
             running_loss += loss.item() * noisy.size(0)
 
-            # Progress print every 10% of batches
             if (batch + 1) % max(1, total_batches // 4) == 0 or batch == total_batches - 1:
                 percent = 100 * (batch + 1) / total_batches
-                print(f"\tEpoch {epoch+1}/{epochs} - Batch {batch+1}/{total_batches} ({percent:.1f}%)")
+                print(f"\tEpoch {epoch+1}/{epochs} - Batch {batch+1}/{total_batches} ({percent:.1f}%)", end="\r")
 
         epoch_loss = running_loss / len(dataloader.dataset)
         train_losses.append(epoch_loss)
