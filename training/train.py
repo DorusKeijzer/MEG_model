@@ -110,7 +110,7 @@ def main():
     # Hyperparameters
     embed_dim = 256
     num_classes = 4  # adjust this if using only 4 tasks
-    batch_size = 8
+    batch_size = 1
     num_epochs = 50
     lr = 1e-4
 
