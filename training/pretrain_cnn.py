@@ -111,9 +111,9 @@ if __name__ == "__main__":
     dataset = get_denoising_cnn_pretrain_dataset()
     train_size = int(0.8 *len(dataset))
     val_size = len(dataset) - train_size
-    train_set, val_set = random_split(full_dataset, [train_size, val_size])
+    train_set, val_set = random_split(dataset, [train_size, val_size])
 
     train_loader = DataLoader(train_set)
     val_loader = DataLoader(val_set)
 
-    train_cnn_denoising_autoencoder(model, train_loader, val_loader, 2)
+    train_cnn_denoising_autoencoder(model, train_loader, val_loader, 40)
