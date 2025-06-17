@@ -199,7 +199,7 @@ def main():
             torch.save({
                 'cnn_state_dict': model_cnn.state_dict(),
                 'transformer_state_dict': model_transformer.state_dict(),
-            }, 'best_model.pt')
+            }, 'results/model_weights/classification_no_pretraining/best_model.pt')
             print("Saved best model!")
         else:
             wait += 1
