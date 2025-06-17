@@ -150,8 +150,8 @@ if __name__ == "__main__":
         fig.suptitle(name, fontsize=16)
 
         for row in range(num_samples):
-            clean_img = clean[row].squeeze().reshape(20, 21)
-            noisy_img = noisy[row].squeeze().reshape(20, 21)
+            clean_img = clean[row].squeeze().cpu().numpy()
+            noisy_img = noisy[row].squeeze().cpu().numpy()
             noise_img = (noisy[row] - clean[row]).squeeze().reshape(20, 21)
 
             axs[row, 0].imshow(clean_img, cmap='viridis')
