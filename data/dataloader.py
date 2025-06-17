@@ -4,16 +4,16 @@ import numpy as np
 import os
 from utils import noise_mask, available_device
 
+
 class DenoisingCNNPretrainDataset(Dataset):
     """Loads individual samples, with gaussian noise and clean"""
-    def __init__(self, npy_file, noise_std: float = 0.0001, noise_mask=None, device='cpu'):
+    def __init__(self, npy_file, noise_std: float = 0.0001, noise_mask=None):
         self.noise_std = noise_std
         self.data = np.load(npy_file, mmap_mode='r')  # lazy loading
         self.length = self.data.shape[0]
-        self.device = device
-        # Make sure noise_mask is a tensor on correct device
+        
         if noise_mask is not None:
-            self.noise_mask = torch.tensor(noise_mask, dtype=torch.float32, device=device)
+            self.noise_mask = torch.tensor(noise_mask, dtype=torch.float32)
         else:
             self.noise_mask = None
     
@@ -21,18 +21,17 @@ class DenoisingCNNPretrainDataset(Dataset):
         return self.length
     
     def __getitem__(self, idx):
-        # Directly create tensor on target device, no double wrapping
-        clean_frame = torch.from_numpy(self.data[idx].copy()).float().to(self.device)
+        clean_frame = torch.from_numpy(self.data[idx].copy()).float()  # keep on CPU
 
-        # Add batch and channel dims if needed (unsqueeze at dim=0 and dim=1)
-        frame_tensor = clean_frame.unsqueeze(0).unsqueeze(0)  # shape (1,1,20,21)
+        # Add batch and channel dims (1,1,H,W)
+        frame_tensor = clean_frame.unsqueeze(0).unsqueeze(0)
 
         noise = torch.randn_like(clean_frame) * self.noise_std
         
         if self.noise_mask is not None:
             noise = noise * self.noise_mask
 
-        noisy_frame = (clean_frame + noise).unsqueeze(0).unsqueeze(0)  # same shape as frame_tensor
+        noisy_frame = (clean_frame + noise).unsqueeze(0).unsqueeze(0)
         
         return frame_tensor, noisy_frame
 
@@ -60,7 +59,7 @@ def get_denoising_cnn_pretrain_loader(batch_size=64, shuffle=True):
     print(f"Length of combined dataset: {len(ds)}")
 
     print(f"batches {len(ds)/64}")
-    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle)
+    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=4, pin_memory=True)
 
 
 class MaskingCNNPretrainedDataset(Dataset):

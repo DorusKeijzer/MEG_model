@@ -6,7 +6,7 @@ from utils import available_device
 from sys import argv
 
 if len(argv) == 1:
-    lr = 1e-1
+    lr = 1e-3
 else:
     lr = float(argv[1]) 
 
@@ -36,7 +36,7 @@ def train_cnn_denoising_autoencoder(
         model.train()
         running_loss = 0.0
 
-        for batch, (noisy, clean) in enumerate(dataloader):
+        for batch, (clean, noisy) in enumerate(dataloader):
             noisy = noisy.to(device).float()
             clean = clean.to(device).float()
             optimizer.zero_grad()
@@ -47,9 +47,9 @@ def train_cnn_denoising_autoencoder(
             running_loss += loss.item() * noisy.size(0)
 
             # Progress print every 10% of batches
-            if (batch + 1) % max(1, total_batches // 10) == 0 or batch == total_batches - 1:
+            if (batch + 1) % max(1, total_batches // 4) == 0 or batch == total_batches - 1:
                 percent = 100 * (batch + 1) / total_batches
-                print(f"Epoch {epoch+1}/{epochs} - Batch {batch+1}/{total_batches} ({percent:.1f}%)")
+                print(f"\tEpoch {epoch+1}/{epochs} - Batch {batch+1}/{total_batches} ({percent:.1f}%)")
 
         epoch_loss = running_loss / len(dataloader.dataset)
         train_losses.append(epoch_loss)
