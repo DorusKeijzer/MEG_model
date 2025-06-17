@@ -79,8 +79,8 @@ def evaluate(model, loader, criterion):
 def run_all_combinations():
     dataset = MEGDataset(DATA_DIR)
     train_set, val_set = split_dataset(dataset)
-    train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=BATCH_SIZE)
+    train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, pin_memory=True)
+    val_loader = DataLoader(val_set, batch_size=BATCH_SIZE, num_workers=2, pin_memory=True)
 
     for cnn_type in cnn_types:
         for seq_type in seq_types:
