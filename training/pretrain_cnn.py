@@ -3,6 +3,7 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.data import DataLoader
+from data.dataloader import get_masked_cnn_pretrain_dataset, get_masked_noisy_cnn_pretrain_dataset, get_denoising_cnn_pretrain_dataset
 from utils import available_device
 from sys import argv
 
@@ -110,12 +111,27 @@ def train_cnn_denoising_autoencoder(
     print("Training complete. Best loss: {:.6f}".format(best_loss))
 
 if __name__ == "__main__":
+    from sys import argv
+
+    specified_dataset = "noise"
+
+    if len(argv) == 2:
+        specified_dataset = argv[1]
+
     from models.spatial_models import CNNFrameAutoencoder
     from data.dataloader import get_denoising_cnn_pretrain_dataset
     from torch.utils.data import random_split
 
     model = CNNFrameAutoencoder()
-    dataset = get_denoising_cnn_pretrain_dataset()
+
+    if specified_dataset == "masking":
+        dataset = get_masked_cnn_pretrain_dataset()
+    if specified_dataset == "both":
+        dataset = get_masked_noisy_cnn_pretrain_dataset() 
+    else:
+        dataset = get_denoising_cnn_pretrain_dataset()
+
+
     train_size = int(0.8 *len(dataset))
     val_size = len(dataset) - train_size
     train_set, val_set = random_split(dataset, [train_size, val_size])
