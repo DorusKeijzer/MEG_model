@@ -14,20 +14,21 @@ else:
 
 print(f"learning rate is {lr}")
 
-def evaluate(model, val_loader,  device=available_device):
+def evaluate(model, val_loader, device=available_device):
     criterion = torch.nn.MSELoss()
     model.eval()
 
     total_loss = 0
-    for clean, noisy in val_loader:
+    with torch.no_grad():  # <<< Add this
+        for clean, noisy in val_loader:
+            noisy = noisy.to(device).float()
+            clean = clean.to(device).float()
 
-        noisy = noisy.to(device).float()
-        clean = clean.to(device).float()
+            reconstructed, _ = model(noisy)
+            loss = criterion(reconstructed, clean)
+            total_loss += loss.item() * noisy.size(0)  # Use .item() to keep it on CPU
 
-        reconstructed, _ = model(noisy)
-        loss = criterion(reconstructed, clean)
-        total_loss += loss
-    avg_loss = total_loss / len(val_loader)
+    avg_loss = total_loss / len(val_loader.dataset)  # Use dataset size for average
     return avg_loss
 
 
