@@ -13,10 +13,17 @@ Our model architecture consists of a CNN that creates spatial features, which ar
 
 ## Self-supervised pretraining
 
-For the CNN we investigate if it is beneficial to pretraining the model on a denoising task. To this end, we augmented the model with a decoder to form an autoencoder, and trained the model on reconstructing the clean MEG from noisy MEG data. During training, we got rid of the decoder but initialized the model using the weights learned in this reconstruction task. 
+### denoising autoencoder
 
-...
+For the CNN we investigate if it is beneficial to pretraining the model on a denoising task. To this end, we augmented the model with a decoder to form an autoencoder, and trained the model on reconstructing the clean MEG from noisy MEG data. During training, we got rid of the decoder but initialized the model using the weights learned in this reconstruction task. We hope that this makes the model robust to noise
 
+### masked MEG node reconstruction
+
+In another pretraining task, we again use the autoencoder setup but randomly mask nodes of the MEG data and task the model with reconstructing these nodes from the rest of the data. We hope that this forces the model to pick up spatial dependencies. 
+
+### masked sequence reconstruction
+
+For our transformer we mask parts of the sequence and train the model to reconstruct the missing part of the sequence. We hope that this encourages our model to learn context aware embeddings.
 
 # Getting started
 
