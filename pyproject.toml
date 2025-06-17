@@ -6,7 +6,7 @@ authors = ["Dorus <doruskeijzer@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
+python = ">=3.11,<3.13"
 torch = "^2.7.1"
 matplotlib = "^3.10.3"
 numpy = "^2.3.0"
