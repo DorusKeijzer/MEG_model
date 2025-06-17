@@ -116,4 +116,4 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_set)
     val_loader = DataLoader(val_set)
 
-    train_cnn_denoising_autoencoder(model, train_loader, val_loader, 2)
+    train_cnn_denoising_autoencoder(model, train_loader, val_loader, 40)
