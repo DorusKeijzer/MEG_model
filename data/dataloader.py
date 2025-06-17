@@ -3,12 +3,13 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import os
 from utils import noise_mask, available_device
+from random import random
 
 
 class DenoisingCNNPretrainDataset(Dataset):
     """Loads individual samples, with gaussian noise and clean"""
-    def __init__(self, npy_file, noise_std: float = 0.2, noise_mask=None):
-        self.noise_std = noise_std
+    def __init__(self, npy_file, max_noise_std: float = 0.3, noise_mask=None):
+        self.max_noise_std = max_noise_std
         self.data = np.load(npy_file, mmap_mode='r')  # lazy loading
         self.length = self.data.shape[0]
         
@@ -26,7 +27,7 @@ class DenoisingCNNPretrainDataset(Dataset):
         # Add batch and channel dims (1,1,H,W)
         frame_tensor = clean_frame.unsqueeze(0).unsqueeze(0)
 
-        noise = torch.randn_like(clean_frame) * self.noise_std
+        noise = torch.randn_like(clean_frame) * random() * self.max_noise_std # gaussian noise with uniformly distibuted std
         
         if self.noise_mask is not None:
             noise = noise * self.noise_mask
@@ -35,7 +36,7 @@ class DenoisingCNNPretrainDataset(Dataset):
         
         return frame_tensor, noisy_frame
 
-def get_denoising_cnn_pretrain_loader(batch_size=64, shuffle=True):
+def get_denoising_cnn_pretrain_dataset(batch_size=64, shuffle=True):
     file_path = "./data/processed_data/"
     datasets = []
     for task in ["Cross", "Intra"]:
@@ -59,7 +60,7 @@ def get_denoising_cnn_pretrain_loader(batch_size=64, shuffle=True):
     print(f"Length of combined dataset: {len(ds)}")
 
     print(f"batches {len(ds)/64}")
-    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=2, pin_memory=True)
+    return ds
 
 
 class MaskingCNNPretrainedDataset(Dataset):

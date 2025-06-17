@@ -2,6 +2,7 @@ import torch
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import numpy as np
+from torch.utils.data import DataLoader
 from utils import available_device
 from sys import argv
 
@@ -13,9 +14,21 @@ else:
 
 print(f"learning rate is {lr}")
 
+def evaluate(model, val_loader):
+    total_loss = 0
+    for clean, noisy in val_loader:
+        reconstructed, _ = model(noisy)
+        loss = criterion(reconstructed, clean)
+        total_loss += loss
+    avg_loss = total_loss / len(val_loader)
+    return avg_loss
+
+
+
 def train_cnn_denoising_autoencoder(
     model,
-    dataloader,
+    train_loader,
+    val_loader,
     epochs=20,
     lr=1e-1,
     device=available_device,
@@ -29,14 +42,14 @@ def train_cnn_denoising_autoencoder(
     epochs_no_improve = 0
     train_losses = []
 
-    total_batches = len(dataloader)
+    total_batches = len(train_loader)
     print(f"Total batches per epoch: {total_batches}")
 
     for epoch in range(epochs):
         model.train()
         running_loss = 0.0
 
-        for batch, (clean, noisy) in enumerate(dataloader):
+        for batch, (clean, noisy) in enumerate(train_loader):
             if batch == 0 and epoch == 0:
                 print("Clean min/max:", clean.min().item(), clean.max().item())
                 print("Noisy min/max:", noisy.min().item(), noisy.max().item())
@@ -54,14 +67,18 @@ def train_cnn_denoising_autoencoder(
                 percent = 100 * (batch + 1) / total_batches
                 print(f"\tEpoch {epoch+1}/{epochs} - Batch {batch+1}/{total_batches} ({percent:.1f}%)", end="\r")
 
-        epoch_loss = running_loss / len(dataloader.dataset)
+        epoch_loss = running_loss / len(train_loader.dataset)
         train_losses.append(epoch_loss)
 
-        print(f"Epoch [{epoch+1}/{epochs}] Loss: {epoch_loss:.6f}")
+        print(f"Epoch [{epoch+1}/{epochs}] Training Loss: {epoch_loss:.6f}")
+
+        val_loss = evaluate(model, val_loader)
+
+        print(f"Epoch [{epoch+1}/{epochs}] Validation Loss: {val_loss:.6f}")
 
         # Early stopping check
-        if epoch_loss < best_loss:
-            best_loss = epoch_loss
+        if val_loss < best_loss:
+            best_loss = val_loss
             epochs_no_improve = 0
             # Save best model checkpoint
             torch.save(model.state_dict(), "results/model_weights/denoising/best_cnn_denoising_autoencoder.pth")
@@ -85,9 +102,16 @@ def train_cnn_denoising_autoencoder(
 
 if __name__ == "__main__":
     from models.spatial_models import CNNFrameAutoencoder
-    from data.dataloader import get_denoising_cnn_pretrain_loader
+    from data.dataloader import get_denoising_cnn_pretrain_dataset
+    from torch.utils.data import random_split
 
     model = CNNFrameAutoencoder()
-    dataloader = get_denoising_cnn_pretrain_loader()
+    dataset = get_denoising_cnn_pretrain_dataset()
+    train_size = int(0.8 *len(dataset))
+    val_size = len(dataset) - train_size
+    train_set, val_set = random_slit(full_dataset, [train_size, val_size])
 
-    train_cnn_denoising_autoencoder(model, dataloader, 40)
+    train_loader = DataLoader(train_set)
+    val_loader = DataLoader(val_set)
+
+    train_cnn_denoising_autoencoder(model, train_loader, val_loader, 40)
