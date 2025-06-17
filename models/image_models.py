@@ -100,13 +100,15 @@ class CNNFrameAutoencoder(nn.Module):
 
         # Decoder
         self.fc_dec = nn.Linear(embed_dim, 128 * 4 * 4)
+
         self.decoder = nn.Sequential(
-            nn.Upsample(scale_factor=2),  # 4x4 → 8x8
-            nn.Conv2d(128, 64, 3, padding=1), nn.ReLU(),
-            nn.Upsample(scale_factor=2.5),  # 8x8 → ~20x20
-            nn.Conv2d(64, 32, 3, padding=1), nn.ReLU(),
-            nn.Conv2d(32, 1, 3, padding=1),  # Output: 1 channel
+            nn.ConvTranspose2d(128, 64, 3, stride=2, output_padding=1), nn.ReLU(),  # 4x4 -> 9x9
+            nn.ConvTranspose2d(64, 32, 3, stride=2, output_padding=1), nn.ReLU(),   # 9x9 -> ~18x18
+            nn.Conv2d(32, 1, 3, padding=1), nn.Sigmoid(),                          # 18x18 -> 18x18
+            nn.Upsample(size=(20, 21), mode='bilinear', align_corners=False)       # Upsample to 20x21
         )
+
+
 
     def forward(self, x):
         B, T, C, H, W = x.shape
@@ -120,23 +122,33 @@ class CNNFrameAutoencoder(nn.Module):
 
 
 if __name__ == "__main__":
-    B, T, C, H, W = 4, 100, 1, 20, 21  # batch size, time steps, channels, height, width
+    import torch
 
+    B, T, C, H, W = 4, 100, 1, 20, 21  # Batch, Time, Channel, Height, Width
     dummy_input = torch.randn(B, T, C, H, W)
 
     print("=== Testing BasicCNNEncoder ===")
     encoder = BasicCNNEncoder(embed_dim=128, out_features=64)
     out = encoder(dummy_input)
-    print("Output shape (encoder):", out.shape)
-    assert out.shape == (B, 64), "BasicCNNEncoder output shape mismatch, nigga"
+    print("Output shape (BasicCNNEncoder):", out.shape)
+    assert out.shape == (B, 64), "BasicCNNEncoder output shape mismatch"
 
-    print("\n=== Testing CNNFrameAutoencoder ===")
     autoencoder = CNNFrameAutoencoder(embed_dim=128)
     recon, latents = autoencoder(dummy_input)
     print("Reconstructed shape:", recon.shape)
     print("Latent shape:", latents.shape)
-    assert recon.shape == (B, T, 1, H, W), "Autoencoder recon shape mismatch, nigga"
-    assert latents.shape == (B, T, 128), "Autoencoder latent shape mismatch, nigga"
+    assert recon.shape == (B, T, 1, H, W), "Autoencoder recon shape mismatch"
+    assert latents.shape == (B, T, 128), "Autoencoder latent shape mismatch"
 
-    print("\n✅ All tests passed, you good cuh")
+    # print("\n=== Testing AttentionCNNEncoder ===")
+    # attn_cnn = AttentionCNNEncoder(embed_dim=128, out_features=64)
+    # out = attn_cnn(dummy_input)
+    # print("Output shape (AttentionCNNEncoder):", out.shape)
+    # assert out.shape == (B, 64), "AttentionCNNEncoder output shape mismatch"
+
+    # print("\n=== Testing TransformerFeatureExtractor ===")
+    # transformer = TransformerFeatureExtractor(input_dim=H * W, embed_dim=128)
+    # out = transformer(dummy_input.squeeze(2))  # Remove channel dim for this model
+    # print("Output shape (TransformerFeatureExtractor):", out.shape)
+    # assert out.shape == (B, 128), "TransformerFeatureExtractor output shape mismatch"
 
