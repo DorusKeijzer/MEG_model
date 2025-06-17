@@ -57,18 +57,54 @@ for (r, c), val in positions.items():
 layout_matrix = layout_matrix - 1
 
 
+def compute_mean_std(file_path, downsample_factor):
+    """computes the mean and std over the full dataset without crashing your computer"""
+    count = 0
+    mean = None
+    M2 = None
+
+    for task in ["Cross", "Intra"]:
+        for subdir in os.listdir(os.path.join(file_path, task)):
+            dirname = subdir
+            subdir_path = os.path.join(file_path, task, dirname)
+            if os.path.isdir(subdir_path) and "test" not in dirname:
+                for file in os.listdir(subdir_path):
+                    if file.endswith(".h5"):
+                        h5_filepath = os.path.join(subdir_path, file)
+                        with h5py.File(h5_filepath, 'r') as f:
+                            dataset_name = list(f.keys())[0]
+                            data = f[dataset_name][()]  # (248, time)
+                            data = data.T[::downsample_factor]  # (time_downsampled, 248)
+
+                        for x in data:
+                            count += 1
+                            x = x.astype(np.float64)
+                            if mean is None:
+                                mean = np.zeros_like(x)
+                                M2 = np.zeros_like(x)
+                            delta = x - mean
+                            mean += delta / count
+                            delta2 = x - mean
+                            M2 += delta * delta2
+
+    variance = M2 / (count - 1)
+    std = np.sqrt(variance)
+    return mean, std
+
+
+
 def get_dataset_name(file_path):
     return os.path.splitext(os.path.basename(file_path))[0]
-    
 
-def process_meg_data(h5_filepath, downsample_factor, dirname, save_dir="./data/processed_data"):
+
+def process_meg_data(h5_filepath, downsample_factor, dirname, mean, std, save_dir="./data/processed_data"):
     """
     Opens .h5 file, downsamples, applies time-wise Z-score normalization, spatial transform,
     then saves a npy object to specified save_dir.
     """
     with h5py.File(h5_filepath, 'r') as f:
         dataset_name = list(f.keys())[0]
-        print(dataset_name)
+        print(f"Loading dataset: {dataset_name}")
         data = f[dataset_name][()]  # shape (248, time_steps)
 
     # Transpose to shape (time_steps, 248)
@@ -77,10 +113,14 @@ def process_meg_data(h5_filepath, downsample_factor, dirname, save_dir="./data/p
     # Downsample temporally
     data_ds = data[::downsample_factor]
 
+    # Make sure mean and std shape matches sensors axis (248)
+    if mean.ndim == 2 and mean.shape[1] == 1:
+        mean = mean.squeeze()
+    if std.ndim == 2 and std.shape[1] == 1:
+        std = std.squeeze()
+
     # Time-wise Z-score normalization
-    means = np.mean(data_ds, axis=1, keepdims=True)
-    stds = np.std(data_ds, axis=1, keepdims=True) + 1e-8  # avoid div by zero
-    data_ds_norm = (data_ds - means) / stds
+    data_ds_norm = (data_ds - mean) / std  # shape (time_steps_downsampled, 248)
 
     # Initialize spatial reshaped data array
     num_time_steps = data_ds_norm.shape[0]
@@ -107,6 +147,9 @@ def process_meg_data(h5_filepath, downsample_factor, dirname, save_dir="./data/p
 if __name__ == "__main__":
     file_path = "./data/files/"
 
+
+    mean, std = compute_mean_std(file_path,DOWNSAMPLE_FACTOR )
+
     for task in ["Cross", "Intra"]:
         for subdir in os.listdir(os.path.join(file_path, task)):
             dirname = subdir
@@ -115,4 +158,4 @@ if __name__ == "__main__":
                 for file in os.listdir(subdir):
                     if os.path.splitext(file)[-1] == ".h5":
                         full_path = os.path.join(subdir, file)
-                        process_meg_data(full_path, DOWNSAMPLE_FACTOR, os.path.join(task, dirname))
+                        process_meg_data(full_path, DOWNSAMPLE_FACTOR, os.path.join(task, dirname), mean, std)
