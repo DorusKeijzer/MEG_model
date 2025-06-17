@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.data import DataLoader
 from data.dataloader import get_masked_cnn_pretrain_dataset, get_masked_noisy_cnn_pretrain_dataset, get_denoising_cnn_pretrain_dataset
-from utils import available_device
+from utils import available_device, noise_mask
 from sys import argv
 
 lr = 1e-3
@@ -120,11 +120,11 @@ if __name__ == "__main__":
     model = CNNFrameAutoencoder()
 
     if specified_dataset == "masking":
-        dataset = get_masked_cnn_pretrain_dataset()
+        dataset = get_masked_cnn_pretrain_dataset(noise_mask=noise_mask)
     if specified_dataset == "both":
-        dataset = get_masked_noisy_cnn_pretrain_dataset() 
+        dataset = get_masked_noisy_cnn_pretrain_dataset(noise_mask=noise_mask) 
     else:
-        dataset = get_denoising_cnn_pretrain_dataset()
+        dataset = get_denoising_cnn_pretrain_dataset(noise_mask=noise_mask)
 
 
     train_size = int(0.8 *len(dataset))

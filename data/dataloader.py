@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from random import random, randint
-from utils import available_device
+from utils import available_device, noise_mask
 
 
 class DenoisingCNNPretrainDataset(Dataset):
@@ -275,14 +275,16 @@ if __name__ == "__main__":
     # compare noisy + clean frames
 
     file = "data/processed_data/Cross/test3/task_working_memory_735148_4.npy"
-    noidedset = get_denoising_cnn_pretrain_dataset()
-    maskedset = get_masked_cnn_pretrain_dataset()
+    noidedset = get_denoising_cnn_pretrain_dataset(noise_mask=noise_mask)
+    maskedset = get_masked_cnn_pretrain_dataset(noise_mask=noise_mask)
+    bothset = get_masked_noisy_cnn_pretrain_dataset(noise_mask=noise_mask)
     noided = DataLoader(noidedset)
-    masked = DataLoader(noidedset)
+    masked = DataLoader(maskedset)
+    bothed = DataLoader(bothset)
     
 
     # Pick one loader for visualization
-    for name, task in zip(["gaussian noise", "random masking"], [noided, masked]):
+    for name, task in zip(["gaussian noise", "random masking", "both masking and noise"], [noided, masked, bothed]):
 
         clean, noisy = next(iter(task))  # get batch
         print(clean.shape)
