@@ -8,9 +8,9 @@ import os
 import numpy as np
 
 from data.dataloader import MaskedMEGSequenceDataset
-from models.cnn import CNNFrameAutoencoder
-from models.transformer import TemporalTransformer
-from models.decoder import TransformerWithDecoder
+from models.spatial_models import CNNFrameAutoencoder
+from models.sequence_models import TemporalTransformer
+from models.sequence_models import TransformerWithDecoder
 
 BATCH_SIZE = 64
 EPOCHS = 50
