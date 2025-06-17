@@ -128,48 +128,88 @@ def get_masked_noisy_cnn_pretrain_dataset(batch_size=64, shuffle=True, noise_mas
     print(f"Length of combined masked+noisy dataset: {len(ds)}")
     return ds
 
-class LSTMPretrainDataset(Dataset):
-    """Loads a contiguous sequence of frames"""
-    def __init__(self, npy_file, seq_len=20):
-        self.data = np.load(npy_file, allow_pickle=True)  
-        self.seq_len = seq_len
+
+class MEGVolumeDataset(Dataset):
+    TASK_LABELS = {
+        'rest': 0,
+        'task_motor': 1,
+        'task_story_math': 2,
+        'task_working_memory': 3
+    }
+    
+    def __init__(self, root_dir, mode='train'):
+        self.samples = []
+        
+        for task_group in ['Intra', 'Cross']:
+            task_group_path = os.path.join(root_dir, task_group)
+            
+            subfolders = ['train'] if mode == 'train' else ['test'] if task_group == 'Intra' else ['test1', 'test2', 'test3']
+            
+            for subfolder in subfolders:
+
+
+                folder_path = os.path.join(task_group_path, subfolder)
+                if not os.path.exists(folder_path):
+                    continue
+                
+                for file in os.listdir(folder_path):
+
+                    if file.endswith('.npy'):
+                        # Parsing label logic
+                        filename = file.lower()
+                        
+                        if filename.startswith('rest'):
+                            label = self.TASK_LABELS['rest']
+                        else:
+                            # Non-resting: filenames start with "task_"
+                            # Extract full task name prefix before subjectID/number parts
+                            parts = filename.split('_')
+                            # gather first two parts: task and the actual task type words, eg ['task', 'motor', ...]
+                            # task label could be multiple words joined by underscore: e.g. task_story_math
+                            # so try to reconstruct task label by joining parts until numeric hit
+                            
+                            first_num_idx = None
+                            for i, p in enumerate(parts):
+                                if p.isdigit():
+                                    first_num_idx = i
+                                    break
+                            if first_num_idx is None:
+                                # no digit found, skip this file just in case
+                                continue
+                            
+                            task_name = '_'.join(parts[:first_num_idx])
+                            label = self.TASK_LABELS.get(task_name, None)
+                            if label is None:
+                                # skip unknown labels
+                                continue
+                        
+                        full_path = os.path.join(folder_path, file)
+                        self.samples.append((full_path, label))
     
     def __len__(self):
-        return max(0, self.data.shape[0] - self.seq_len + 1)
+        return len(self.samples)
     
     def __getitem__(self, idx):
-        seq = self.data[idx:idx+self.seq_len]  
-        seq_tensor = torch.tensor(seq, dtype=torch.float32).unsqueeze(1)  
-        return seq_tensor
-
-def get_lstm_pretrain_loader(npy_file, seq_len=20, batch_size=16, shuffle=True):
-    ds = LSTMPretrainDataset(npy_file, seq_len)
-    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle)
-
-# Classifier Dataset (sequence + label)
-class ClassifierDataset(Dataset):
-    """Gets full sequences with labels"""
-    def __init__(self, npy_file, label_file, seq_len=20):
-        self.data = np.load(npy_file, allow_pickle=True)  
-        self.seq_len = seq_len
-        self.labels = np.load(label_file)
-    
-    def __len__(self):
-        return len(self.labels)
-    
-    def __getitem__(self, idx):
-        seq_start = idx  
-        seq = self.data[seq_start:seq_start+self.seq_len]
-        seq_tensor = torch.tensor(seq, dtype=torch.float32).unsqueeze(1) 
-        label = torch.tensor(self.labels[idx], dtype=torch.long)
-        return seq_tensor, label
-
-def get_classifier_loader(npy_file, label_file, seq_len=20, batch_size=16, shuffle=True):
-    ds = ClassifierDataset(npy_file, label_file, seq_len)
-    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle)
-
+        path, label = self.samples[idx]
+        volume = np.load(path)  # shape: (20, 21, T)
+        
+        volume = torch.tensor(volume, dtype=torch.float32)  # (20, 21, T)
+        volume = volume.permute(2, 0, 1).unsqueeze(1)       # (T, 1, 20, 21)
+        
+        return volume, label
 
 if __name__ == "__main__":
+    dataset = MEGVolumeDataset("./data/processed_data/", mode='train')
+    loader = torch.utils.data.DataLoader(dataset, batch_size=4, shuffle=True)
+
+    for volumes, labels in loader:
+        print(volumes.shape)  # (B, T, 1, 20, 21)
+        print(labels)         # (B,)
+        break
+
+
+
+
     from matplotlib import pyplot as plt
     # compare noisy + clean frames
 
