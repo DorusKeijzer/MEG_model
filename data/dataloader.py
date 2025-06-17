@@ -37,16 +37,17 @@ def get_denoising_cnn_pretrain_loader(batch_size=64, shuffle=True):
                         full_path = os.path.join(subdir, file)
                         datasets.append(DenoisingCNNPretrainDataset(full_path))
                         ds =DenoisingCNNPretrainDataset(full_path)
-                        print(f"Length of combined dataset: {len(ds)}")
-                        print(f"batches {len(ds)/64}")
+                        # print(f"Length of combined dataset: {len(ds)}")
+                        # print(f"batches {len(ds)/64}")
 
-                        return DataLoader(ds)
-        return
+                        # return DataLoader(ds)
+        # return
 
 
     ds = torch.utils.data.ConcatDataset(datasets)
     print(f"Length of combined dataset: {len(ds)}")
 
+    print(f"batches {len(ds)/64}")
     return DataLoader(ds, batch_size=batch_size, shuffle=shuffle)
 
 
@@ -123,31 +124,35 @@ if __name__ == "__main__":
 
     # Pick one loader for visualization
     for name, task in zip(["gaussian noise", "random masking"], [noided, masked]):
-        clean, noisy = next(iter(task))  # use the same 'task' for both clean & noisy
-        print(f"clean shape: {clean.shape}")
-        print(f"noisy shape: {noisy.shape}")
-        clean = clean[:8]  # take first 8 samples
-        noisy = noisy[:8]
 
+        clean, noisy = next(iter(task))  # get batch
+        batch_size = clean.shape[0]
+        num_samples = min(8, batch_size)  # use smaller of 8 or actual batch size
 
-        fig, axs = plt.subplots(nrows=8, ncols=3, figsize=(6, 16))
+        clean = clean[:num_samples]
+        noisy = noisy[:num_samples]
+
+        fig, axs = plt.subplots(nrows=num_samples, ncols=3, figsize=(6, 2 * num_samples))
+        axs = axs.reshape(num_samples, 3)  # force axs to 2D array
+
         fig.suptitle(name, fontsize=16)
 
-        for row in range(8):
-            axs[row, 0].imshow(clean[row].squeeze(), cmap='viridis')
+        for row in range(num_samples):
+            clean_img = clean[row].squeeze().reshape(20, 21)
+            noisy_img = noisy[row].squeeze().reshape(20, 21)
+            noise_img = (noisy[row] - clean[row]).squeeze().reshape(20, 21)
+
+            axs[row, 0].imshow(clean_img, cmap='viridis')
             axs[row, 0].set_title("Clean")
             axs[row, 0].axis('off')
 
-            axs[row, 1].imshow(noisy[row].squeeze(), cmap='viridis')
+            axs[row, 1].imshow(noisy_img, cmap='viridis')
             axs[row, 1].set_title("Noisy")
             axs[row, 1].axis('off')
 
-            axs[row, 2].imshow((noisy[row]-clean[row]).squeeze(), cmap='viridis')
+            axs[row, 2].imshow(noise_img, cmap='viridis')
             axs[row, 2].set_title("noise (noisy-clean)")
             axs[row, 2].axis('off')
 
-
         plt.tight_layout()
         plt.show()
-
-
