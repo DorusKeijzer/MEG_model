@@ -15,6 +15,8 @@ else:
 print(f"learning rate is {lr}")
 
 def evaluate(model, val_loader):
+    criterion = torch.nn.MSELoss()
+
     total_loss = 0
     for clean, noisy in val_loader:
         reconstructed, _ = model(noisy)
@@ -109,7 +111,7 @@ if __name__ == "__main__":
     dataset = get_denoising_cnn_pretrain_dataset()
     train_size = int(0.8 *len(dataset))
     val_size = len(dataset) - train_size
-    train_set, val_set = random_slit(full_dataset, [train_size, val_size])
+    train_set, val_set = random_split(full_dataset, [train_size, val_size])
 
     train_loader = DataLoader(train_set)
     val_loader = DataLoader(val_set)
