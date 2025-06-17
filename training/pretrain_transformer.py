@@ -84,7 +84,7 @@ for epoch in range(EPOCHS):
     if avg_val_loss < best_val_loss:
         best_val_loss = avg_val_loss
         early_stop_counter = 0
-        torch.save(model.state_dict(), "best_pretrained_transformer.pt")
+        torch.save(model.state_dict(), "/results/model_weights/transformer/best_pretrained_transformer.pt")
     else:
         early_stop_counter += 1
         if early_stop_counter >= PATIENCE:
