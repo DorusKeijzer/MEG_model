@@ -119,7 +119,7 @@ if __name__ == "__main__":
     val_size = len(dataset) - train_size
     train_set, val_set = random_split(dataset, [train_size, val_size])
 
-    train_loader = DataLoader(train_set, batch_size=64, num_workers=2, pin_memory=True)
-    val_loader = DataLoader(val_set, batch_size=64, num_workers=2, pin_memory=True)
+    train_loader = DataLoader(train_set, batch_size=32, num_workers=2, pin_memory=True)
+    val_loader = DataLoader(val_set, batch_size=32, num_workers=2, pin_memory=True)
 
-    train_cnn_denoising_autoencoder(model, train_loader, val_loader, 40)
+    train_cnn_denoising_autoencoder(model, train_loader, val_loader, 2)
