@@ -46,7 +46,7 @@ We train models on the classificaton task with each possible combinations of pre
 # Getting started
 
 ## Data
-Download and unzip the data into  `data/files/`. then run `scripts/process_meg_data.py`, which downsamples and processes the meg data. 
+Download and unzip the data and move the `cross` and `infra` folder into  `data/files/`. then run `scripts/process_meg_data.py`, which downsamples and processes the meg data. 
 
 ## Poetry 
 We make use of [Poetry](https://python-poetry.org/) to manage dependencies. If you install Poetry you can run each file from the root using.
@@ -60,9 +60,7 @@ Using poetry is not strictly necessary, but if you don't you need to manage your
 # subdirectories:
 
 ## data/ 
-
-
-Put the downloaded files into `files` and preprocess the data using `scripts/process_meg_data.py`. these processed files will live in this directory.
+Here is where the (processed) data lives
 
 `dataloader.py` contains data loaders for pretraining tasks as well as classification task training
 
