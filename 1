@@ -58,10 +58,10 @@ layout_matrix = layout_matrix - 1
 
 
 def get_dataset_name(file_path):
-    return os.path.splitext(os.path.basename(file_path))[0]
+    return os.path.splitext(file_path)[-2]
     
 
-def process_meg_data(h5_filepath, downsample_factor, dirname, save_dir="./data/processed_data"):
+def process_meg_data(h5_filepath, downsample_factor, dirname, save_dir="../data/processed_data"):
     """
     Opens .h5 file, downsamples, applies time-wise Z-score normalization, spatial transform,
     then saves a npy object to specified save_dir.
@@ -97,9 +97,8 @@ def process_meg_data(h5_filepath, downsample_factor, dirname, save_dir="./data/p
     new_file_dir = os.path.join(save_dir, dirname)
     os.makedirs(new_file_dir, exist_ok=True)
     base_name = get_dataset_name(h5_filepath)
-
-    save_path = os.path.join(new_file_dir, f"{base_name}.npy")
-    np.save(save_path, spatial_data)
+    save_path = os.path.join(save_dir, f"{base_name}_downsampled_norm_spatial.npy")
+    # np.save(save_path, spatial_data)
 
     print(f"Processed data saved to {save_path}")
     return save_path
@@ -108,11 +107,15 @@ if __name__ == "__main__":
     file_path = "./data/files/"
 
     for task in ["Cross", "Intra"]:
+        print(task)
         for subdir in os.listdir(os.path.join(file_path, task)):
+            print("\t", subdir)
             dirname = subdir
             subdir = os.path.join(file_path, task, dirname)
             if isdir(subdir):
                 for file in os.listdir(subdir):
+                    print(file)
+                    
                     if os.path.splitext(file)[-1] == ".h5":
-                        full_path = os.path.join(subdir, file)
-                        process_meg_data(full_path, DOWNSAMPLE_FACTOR, os.path.join(task, dirname))
+                        process_meg_data(file, DOWNSAMPLE_FACTOR, dirname)
+                    quit()

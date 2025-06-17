@@ -52,7 +52,7 @@ Download and unzip the data and move the `cross` and `infra` folder into  `data/
 We make use of [Poetry](https://python-poetry.org/) to manage dependencies. If you install Poetry you can run each file from the root using.
 
 ```bash
-poetry run python <directory>/<python file>.py
+poetry run python -m <directory>/<python file>.py
 ```
 
 Using poetry is not strictly necessary, but if you don't you need to manage your own dependencies.
