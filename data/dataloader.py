@@ -46,7 +46,7 @@ def get_denoising_cnn_pretrain_loader(batch_size=64, shuffle=True):
                 for file in os.listdir(subdir):
                     if os.path.splitext(file)[-1] == ".npy":
                         full_path = os.path.join(subdir, file)
-                        datasets.append(DenoisingCNNPretrainDataset(full_path, noise_mask=noise_mask, device='cuda' if torch.cuda.is_available() else 'cpu'))
+                        datasets.append(DenoisingCNNPretrainDataset(full_path, noise_mask=noise_mask))
                         ds =DenoisingCNNPretrainDataset(full_path)
                         # print(f"Length of combined dataset: {len(ds)}")
                         # print(f"batches {len(ds)/64}")
