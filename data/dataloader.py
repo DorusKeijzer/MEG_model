@@ -19,7 +19,7 @@ class DenoisingCNNPretrainDataset(Dataset):
         clean_frame = torch.tensor(self.data[idx], dtype=torch.float32)
 
         frame_tensor = torch.tensor(clean_frame, dtype=torch.float32).unsqueeze(0)
-        noise = torch.randn_like(clean_frame) * self.noise_std
+        noise = torch.randn_like(clean_frame, device=available_device) * self.noise_std
         noise = noise * noise_mask
         noisy_frame = (clean_frame + noise).unsqueeze(0)
         return  frame_tensor, noisy_frame
@@ -63,7 +63,7 @@ class MaskingCNNPretrainedDataset(Dataset):
     def __getitem__(self, idx):
         clean_frame = self.data[idx]
         frame_tensor = torch.tensor(clean_frame, dtype=torch.float32).unsqueeze(0)
-        mask = torch.rand((20, 21), device=available_device) < 0.7
+        mask = torch.rand((20, 21), device=available_device) < 0.8
         noisy_frame = frame_tensor * mask * noise_mask
         return  frame_tensor, noisy_frame
 
