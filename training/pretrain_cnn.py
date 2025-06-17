@@ -14,11 +14,16 @@ else:
 
 print(f"learning rate is {lr}")
 
-def evaluate(model, val_loader):
+def evaluate(model, val_loader,  device=available_device):
     criterion = torch.nn.MSELoss()
+    model.eval()
 
     total_loss = 0
     for clean, noisy in val_loader:
+
+        noisy = noisy.to(device).float()
+        clean = clean.to(device).float()
+
         reconstructed, _ = model(noisy)
         loss = criterion(reconstructed, clean)
         total_loss += loss
@@ -46,6 +51,7 @@ def train_cnn_denoising_autoencoder(
 
     total_batches = len(train_loader)
     print(f"Total batches per epoch: {total_batches}")
+    print(f"Device: {device}")
 
     for epoch in range(epochs):
         model.train()
