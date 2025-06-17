@@ -57,7 +57,7 @@ poetry run python <directory>/<python file>.py
 or
 
 ```bash
-poetry run python -m <directory>.<python file>.py
+poetry run python -m <directory>.<python file>
 ```
 
 if the file is a module

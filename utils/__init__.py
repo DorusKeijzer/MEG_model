@@ -22,4 +22,4 @@ noise_mask = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
 
 
-available_device = "cuda" if torch.cuda.is_available() else "cpu"
+available_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
