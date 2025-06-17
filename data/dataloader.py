@@ -4,25 +4,37 @@ import numpy as np
 import os
 from utils import noise_mask, available_device
 
-
 class DenoisingCNNPretrainDataset(Dataset):
-    """Loads individual samples, with gaussian nois and clean"""
-    def __init__(self, npy_file, noise_std: float = 0.0001):
+    """Loads individual samples, with gaussian noise and clean"""
+    def __init__(self, npy_file, noise_std: float = 0.0001, noise_mask=None, device='cpu'):
         self.noise_std = noise_std
-        self.data = np.load(npy_file, mmap_mode='r')  # lazily loads the data
+        self.data = np.load(npy_file, mmap_mode='r')  # lazy loading
         self.length = self.data.shape[0]
+        self.device = device
+        # Make sure noise_mask is a tensor on correct device
+        if noise_mask is not None:
+            self.noise_mask = torch.tensor(noise_mask, dtype=torch.float32, device=device)
+        else:
+            self.noise_mask = None
     
     def __len__(self):
         return self.length
     
     def __getitem__(self, idx):
-        clean_frame = torch.tensor(self.data[idx], dtype=torch.float32)
+        # Directly create tensor on target device, no double wrapping
+        clean_frame = torch.from_numpy(self.data[idx]).float().to(self.device)  # shape e.g. (20,21)
+        
+        # Add batch and channel dims if needed (unsqueeze at dim=0 and dim=1)
+        frame_tensor = clean_frame.unsqueeze(0).unsqueeze(0)  # shape (1,1,20,21)
 
-        frame_tensor = torch.tensor(clean_frame, dtype=torch.float32).unsqueeze(0)
-        noise = torch.randn_like(clean_frame, device=available_device) * self.noise_std
-        noise = noise * noise_mask
-        noisy_frame = (clean_frame + noise).unsqueeze(0)
-        return  frame_tensor, noisy_frame
+        noise = torch.randn_like(clean_frame) * self.noise_std
+        
+        if self.noise_mask is not None:
+            noise = noise * self.noise_mask
+
+        noisy_frame = (clean_frame + noise).unsqueeze(0).unsqueeze(0)  # same shape as frame_tensor
+        
+        return frame_tensor, noisy_frame
 
 def get_denoising_cnn_pretrain_loader(batch_size=64, shuffle=True):
     file_path = "./data/processed_data/"
@@ -35,7 +47,7 @@ def get_denoising_cnn_pretrain_loader(batch_size=64, shuffle=True):
                 for file in os.listdir(subdir):
                     if os.path.splitext(file)[-1] == ".npy":
                         full_path = os.path.join(subdir, file)
-                        datasets.append(DenoisingCNNPretrainDataset(full_path))
+                        datasets.append(DenoisingCNNPretrainDataset(full_path, noise_mask=noise_mask, device='cuda' if torch.cuda.is_available() else 'cpu'))
                         ds =DenoisingCNNPretrainDataset(full_path)
                         # print(f"Length of combined dataset: {len(ds)}")
                         # print(f"batches {len(ds)/64}")
