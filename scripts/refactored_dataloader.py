@@ -55,15 +55,15 @@ for (i, j), sensor_id in positions.items():
 
 # === Define MEG reshaping function ===
 
-def reshape_meg_data(meg_data, layout_matrix):
+
+def reshape_meg_vectorized(meg_data, layout_matrix):
     H, W = layout_matrix.shape
     n = meg_data.shape[1]
     reshaped = np.zeros((H, W, n), dtype=meg_data.dtype)
-    for i in range(H):
-        for j in range(W):
-            ch = layout_matrix[i, j]
-            if ch != 0:
-                reshaped[i, j, :] = meg_data[ch - 1]  # Adjust for 1-based index
+    nonzero = layout_matrix.nonzero()
+    for i, j in zip(*nonzero):
+        ch = layout_matrix[i, j]
+        reshaped[i, j, :] = meg_data[ch - 1]
     return reshaped
 
 # === Dataset class ===
