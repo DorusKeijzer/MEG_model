@@ -59,7 +59,7 @@ def get_denoising_cnn_pretrain_loader(batch_size=64, shuffle=True):
     print(f"Length of combined dataset: {len(ds)}")
 
     print(f"batches {len(ds)/64}")
-    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=4, pin_memory=True)
+    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, num_workers=2, pin_memory=True)
 
 
 class MaskingCNNPretrainedDataset(Dataset):
