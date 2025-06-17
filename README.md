@@ -25,6 +25,23 @@ In another pretraining task, we again use the autoencoder setup but randomly mas
 
 For our transformer we mask parts of the sequence and train the model to reconstruct the missing part of the sequence. We hope that this encourages our model to learn context aware embeddings.
 
+## ablation experiment
+
+We train models on the classificaton task with each possible combinations of pretraining regimes, then evaluate the F1 score:
+
+|   | Denoising | Masked MEG reconstruction | Masked sequence reconstruction | F1 |
+|---|-----------|---------------------------|--------------------------------|----|
+| 1 |           |                           |                                |    |
+| 2 | x         |                           |                                |    |
+| 3 |           | x                         |                                |    |
+| 4 |           |                           | x                              |    |
+| 5 | x         | x                         |                                |    |
+| 6 | x         |                           | x                              |    |
+| 7 | x         |                           | x                              |    |
+| 8 |           | x                         | x                              |    |
+| 9 | x         | x                         | x                              |    |
+
+
 # Getting started
 
 ## Data
