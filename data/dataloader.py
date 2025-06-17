@@ -2,7 +2,7 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
-from random import random
+from random import random, randint
 from utils import available_device
 
 
@@ -84,6 +84,8 @@ def get_masked_cnn_pretrain_dataset(batch_size=64, shuffle=True, noise_mask=None
     ds = ConcatDataset(datasets)
     print(f"Length of combined masked dataset: {len(ds)}")
     return ds
+
+
 
 
 class MaskedNoisyCNNPretrainDataset(Dataset):
@@ -199,6 +201,57 @@ class MEGVolumeDataset(Dataset):
         
         return volume, label
 
+
+
+class MaskedMEGSequenceDataset(Dataset):
+    def __init__(self, root_dir, seq_len=100, mask_ratio=0.3, noise_mask=None):
+        self.samples = []
+        self.seq_len = seq_len
+        self.mask_ratio = mask_ratio
+        self.noise_mask = noise_mask
+
+        for task_group in ['Intra', 'Cross']:
+            task_group_path = os.path.join(root_dir, task_group)
+            for subfolder in ['train']:
+                folder_path = os.path.join(task_group_path, subfolder)
+                if not os.path.exists(folder_path):
+                    continue
+                for file in os.listdir(folder_path):
+                    if file.endswith('.npy'):
+                        self.samples.append(os.path.join(folder_path, file))
+
+    def __len__(self):
+        return len(self.samples)
+    
+
+    def __getitem__(self, idx):
+        path = self.samples[idx]
+        data = np.load(path)  # (20, 21, T)
+        data = torch.tensor(data, dtype=torch.float32).unsqueeze(1)     # (T, 1, 20, 21)
+
+        assert data.shape[1:] == (1, 20, 21), f"Bad shape: {data.shape}"
+
+        if data.shape[0] < self.seq_len:
+            pad_len = self.seq_len - data.shape[0]
+            pad = torch.zeros(pad_len, 1, 20, 21)
+            data = torch.cat([data, pad], dim=0)
+        else:
+            start_idx = randint(0, data.shape[0] - self.seq_len)
+            data = data[start_idx:start_idx + self.seq_len]
+
+        mask = torch.rand(self.seq_len) < self.mask_ratio  # (T,)
+        masked_data = data.clone()
+        masked_data[mask] = 0.0
+
+        return {
+            'input': masked_data,         # (T, 1, 20, 21)
+            'mask': mask,                 # (T,)
+            'target': data,               # (T, 1, 20, 21)
+        }
+
+
+
+
 if __name__ == "__main__":
     dataset = MEGVolumeDataset("./data/processed_data/", mode='train')
     loader = torch.utils.data.DataLoader(dataset, batch_size=4, shuffle=True)
@@ -207,7 +260,14 @@ if __name__ == "__main__":
         print(volumes.shape)  # (B, T, 1, 20, 21)
         print(labels)         # (B,)
         break
+    masked_temporal_dataset = MaskedMEGSequenceDataset("./data/processed_data/")
+    loader = torch.utils.data.DataLoader(masked_temporal_dataset, batch_size=40, shuffle=True)
 
+    for volumes in loader:
+        print(volumes["input"].shape)  # (B, T, 1, 20, 21)
+        print(volumes["mask"].shape)  # (B, T,)
+        print(volumes["target"].shape)  # (B, T, 1, 20, 21)
+        break
 
 
 
@@ -215,8 +275,11 @@ if __name__ == "__main__":
     # compare noisy + clean frames
 
     file = "data/processed_data/Cross/test3/task_working_memory_735148_4.npy"
-    noided = get_denoising_cnn_pretrain_loader()
-    masked = get_masked_cnn_pretrain_loader(file)
+    noidedset = get_denoising_cnn_pretrain_dataset()
+    maskedset = get_masked_cnn_pretrain_dataset()
+    noided = DataLoader(noidedset)
+    masked = DataLoader(noidedset)
+    
 
     # Pick one loader for visualization
     for name, task in zip(["gaussian noise", "random masking"], [noided, masked]):
