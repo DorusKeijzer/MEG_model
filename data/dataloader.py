@@ -22,8 +22,8 @@ class DenoisingCNNPretrainDataset(Dataset):
     
     def __getitem__(self, idx):
         # Directly create tensor on target device, no double wrapping
-        clean_frame = torch.from_numpy(self.data[idx]).float().to(self.device)  # shape e.g. (20,21)
-        
+        clean_frame = torch.from_numpy(self.data[idx].copy()).float().to(self.device)
+
         # Add batch and channel dims if needed (unsqueeze at dim=0 and dim=1)
         frame_tensor = clean_frame.unsqueeze(0).unsqueeze(0)  # shape (1,1,20,21)
 

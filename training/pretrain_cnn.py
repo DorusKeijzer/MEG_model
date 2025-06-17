@@ -3,12 +3,21 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 import numpy as np
 from utils import available_device
+from sys import argv
+
+if len(argv) == 1:
+    lr = 1e-1
+else:
+    lr = float(argv[1]) 
+
+
+print(f"learning rate is {lr}")
 
 def train_cnn_denoising_autoencoder(
     model,
     dataloader,
     epochs=20,
-    lr=1e-3,
+    lr=1e-1,
     device=available_device,
     patience=5  # early stopping patience in epochs
 ):
@@ -20,12 +29,14 @@ def train_cnn_denoising_autoencoder(
     epochs_no_improve = 0
     train_losses = []
 
+    total_batches = len(dataloader)
+    print(f"Total batches per epoch: {total_batches}")
+
     for epoch in range(epochs):
         model.train()
         running_loss = 0.0
 
         for batch, (noisy, clean) in enumerate(dataloader):
-            print(f"Batch: {batch}", end="\r")
             noisy = noisy.to(device).float()
             clean = clean.to(device).float()
             optimizer.zero_grad()
@@ -34,6 +45,11 @@ def train_cnn_denoising_autoencoder(
             loss.backward()
             optimizer.step()
             running_loss += loss.item() * noisy.size(0)
+
+            # Progress print every 10% of batches
+            if (batch + 1) % max(1, total_batches // 10) == 0 or batch == total_batches - 1:
+                percent = 100 * (batch + 1) / total_batches
+                print(f"Epoch {epoch+1}/{epochs} - Batch {batch+1}/{total_batches} ({percent:.1f}%)")
 
         epoch_loss = running_loss / len(dataloader.dataset)
         train_losses.append(epoch_loss)
