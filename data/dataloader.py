@@ -146,6 +146,7 @@ class MEGVolumeDataset(Dataset):
             subfolders = ['train'] if mode == 'train' else ['test'] if task_group == 'Intra' else ['test1', 'test2', 'test3']
             
             for subfolder in subfolders:
+                print(subfolder)
 
 
                 folder_path = os.path.join(task_group_path, subfolder)
