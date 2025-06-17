@@ -138,6 +138,8 @@ if __name__ == "__main__":
     for name, task in zip(["gaussian noise", "random masking"], [noided, masked]):
 
         clean, noisy = next(iter(task))  # get batch
+        print(clean.shape)
+        print(noisy.shape)
         batch_size = clean.shape[0]
         num_samples = min(8, batch_size)  # use smaller of 8 or actual batch size
 

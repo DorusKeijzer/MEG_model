@@ -56,6 +56,7 @@ class CNNFrameAutoencoder(nn.Module):
         if x.dim() == 4:
             # If input is (B, 1, H, W), add T=1
             x = x.unsqueeze(1)  # (B, 1, 1, H, W)
+        # print(x.shape)
 
         B, T, C, H, W = x.shape
         x = x.view(B * T, C, H, W)

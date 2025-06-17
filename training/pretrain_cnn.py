@@ -26,8 +26,8 @@ def train_cnn_denoising_autoencoder(
 
         for batch, (noisy, clean) in enumerate(dataloader):
             print(f"Batch: {batch}", end="\r")
-            noisy = noisy.unsqueeze(1).to(device).float()
-            clean = clean.unsqueeze(1).to(device).float()
+            noisy = noisy.to(device).float()
+            clean = clean.to(device).float()
             optimizer.zero_grad()
             reconstructed,  _ = model(noisy)
             loss = criterion(reconstructed, clean)
