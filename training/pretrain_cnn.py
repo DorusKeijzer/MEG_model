@@ -33,6 +33,7 @@ def train_cnn_denoising_autoencoder(
     model,
     train_loader,
     val_loader,
+    task,
     epochs=20,
     lr=1e-1,
     device=available_device,
@@ -86,7 +87,7 @@ def train_cnn_denoising_autoencoder(
             best_loss = val_loss
             epochs_no_improve = 0
             # Save best model checkpoint
-            torch.save(model.state_dict(), "results/model_weights/denoising/best_cnn_denoising_autoencoder.pth")
+            torch.save(model.state_dict(), f"results/model_weights/{task}/best_cnn_denoising_autoencoder.pth")
         else:
             epochs_no_improve += 1
             if epochs_no_improve >= patience:
@@ -134,4 +135,4 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_set, batch_size=128, num_workers=2, pin_memory=False)
     val_loader = DataLoader(val_set, batch_size=64, num_workers=2, pin_memory=False)
 
-    train_cnn_denoising_autoencoder(model, train_loader, val_loader, 40)
+    train_cnn_denoising_autoencoder(model, train_loader, val_loader, specified_dataset, epochs=40)
