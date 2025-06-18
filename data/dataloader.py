@@ -1,4 +1,5 @@
 import os
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
@@ -204,7 +205,7 @@ class MEGVolumeDataset(Dataset):
 
 
 class MaskedMEGSequenceDataset(Dataset):
-    def __init__(self, root_dir, seq_len=100, mask_ratio=0.3, noise_mask=None):
+    def __init__(self, root_dir, seq_len=100, mask_ratio=0.3, stride=None, noise_mask=None):
         self.samples = []
         self.seq_len = seq_len
         self.mask_ratio = mask_ratio
@@ -221,6 +222,7 @@ class MaskedMEGSequenceDataset(Dataset):
                 for file in os.listdir(folder_path):
                     if file.endswith('.npy'):
                         self.samples.append(os.path.join(folder_path, file))
+        self._index_volumes(stride)
 
     def _index_volumes(self, stride=None):
         if stride is None:
@@ -230,7 +232,9 @@ class MaskedMEGSequenceDataset(Dataset):
             data = np.load(file_path, mmap_mode='r')
             volume_length = data.shape[0]
             for start in range(0, volume_length - self.seq_len + 1, stride):
+                print(start)
                 self.chunk_index.append((file_path, start))
+        
 
     def __len__(self):
         return len(self.samples)
@@ -253,6 +257,10 @@ class MaskedMEGSequenceDataset(Dataset):
 
 
 if __name__ == "__main__":
+    # sanity checks and visualizing
+    from matplotlib import pyplot as plt
+
+    
     dataset = MEGVolumeDataset("./data/processed_data/", mode='train')
     loader = torch.utils.data.DataLoader(dataset, batch_size=4, shuffle=True)
 
@@ -260,7 +268,8 @@ if __name__ == "__main__":
         print(volumes.shape)  # (B, T, 1, 20, 21)
         print(labels)         # (B,)
         break
-    masked_temporal_dataset = MaskedMEGSequenceDataset("./data/processed_data/")
+
+    masked_temporal_dataset = MaskedMEGSequenceDataset("./data/processed_data/", seq_len=10)
     loader = torch.utils.data.DataLoader(masked_temporal_dataset, batch_size=40, shuffle=True)
 
     for volumes in loader:
@@ -270,8 +279,31 @@ if __name__ == "__main__":
         break
 
 
+        # Get a single sequence
+    for volumes in loader:
+        inputs = volumes["input"][0]     # (T, 1, 20, 21)
+        targets = volumes["target"][0]   # (T, 1, 20, 21)
+        break
 
-    from matplotlib import pyplot as plt
+    T = inputs.shape[0]
+
+    fig, axes = plt.subplots(2, T, figsize=(T * 2, 4))  # 2 rows: input + target
+    for t in range(T):
+        # Top row: input
+        axes[0, t].imshow(inputs[t, 0], cmap='viridis')
+        axes[0, t].set_title(f"Input T{t}")
+        axes[0, t].axis('off')
+        
+        # Bottom row: target
+        axes[1, t].imshow(targets[t, 0], cmap='viridis')
+        axes[1, t].set_title(f"Target T{t}")
+        axes[1, t].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+
+
     # compare noisy + clean frames
 
     file = "data/processed_data/Cross/test3/task_working_memory_735148_4.npy"

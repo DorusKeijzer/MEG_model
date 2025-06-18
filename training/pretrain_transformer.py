@@ -20,7 +20,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 PRINT_EVERY = 1
 VAL_SPLIT = 0.2
 
-full_dataset = MaskedMEGSequenceDataset("./data/processed_data/", seq_len=100, mask_ratio=0.3)
+full_dataset = MaskedMEGSequenceDataset("./data/processed_data/", seq_len=100, mask_ratio=0.3, stride = 25)
 val_len = int(VAL_SPLIT * len(full_dataset))
 train_len = len(full_dataset) - val_len
 train_set, val_set = random_split(full_dataset, [train_len, val_len])
