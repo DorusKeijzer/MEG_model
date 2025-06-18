@@ -237,21 +237,25 @@ class MaskedMEGSequenceDataset(Dataset):
         
         mask = torch.zeros(self.seq_len, dtype=torch.bool)
         
-        # mask contiguous blocks
+        # Use a generator seeded with true randomness
+        g = torch.Generator()
+        g.manual_seed(torch.randint(0, 2**32 - 1, (1,)).item())
+
         total_to_mask = int(self.seq_len * self.mask_ratio)
-        block_size = max(1, total_to_mask)  # You could also vary this
-        
-        start = torch.randint(0, self.seq_len - block_size + 1, (1,)).item()
+        block_size = max(1, total_to_mask)
+
+        start = torch.randint(0, self.seq_len - block_size + 1, (1,), generator=g).item()
         mask[start:start + block_size] = True
-        
+
         masked_data = data.clone()
         masked_data[mask] = 0.0
 
         return {
-            'input': masked_data,         # (T, 1, 20, 21)
-            'mask': mask,                 # (T,)
-            'target': data,               # (T, 1, 20, 21)
+            'input': masked_data,
+            'mask': mask,
+            'target': data,
         }
+
 
 if __name__ == "__main__":
     # sanity checks and visualizing
@@ -281,7 +285,7 @@ if __name__ == "__main__":
         inputs = volumes["input"][0]     # (T, 1, 20, 21)
         targets = volumes["target"][0]   # (T, 1, 20, 21)
         mask = volumes["mask"][0]
-        print(mask)
+        print()
         break
 
     T = inputs.shape[0]
