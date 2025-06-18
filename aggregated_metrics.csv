@@ -1,0 +1,17 @@
+model_task,loss_avg,acc_avg,recall_avg,f1_avg,prec_avg,loss_ci,acc_ci,recall_ci,f1_ci,prec_ci,avg_epochs,epochs_ci
+baseline_no_pretrain_intra,0.003,1.0,1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,50.0,0.0
+masked_cnn_only_intra,0.0596,1.0,1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,47.0,0.0
+all_cross,1.4359,0.1667,0.1786,0.0893,0.0595,0.0,0.0,0.0,0.0,0.0,6.0,0.0
+all_intra,1.4098,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,6.0,0.0
+denoised_cnn_only_intra,0.0302,1.0,1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,50.0,0.0
+pretrained_transformer_only_cross,1.3931,0.7,0.7009,0.6817,0.7508,0.0,0.0,0.0,0.0,0.0,25.0,0.0
+pretrained_transformer_only_intra,0.1053,1.0,1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,17.0,0.0
+masked_cnn_only_cross,1.751,0.4667,0.4732,0.4801,0.5235,0.0,0.0,0.0,0.0,0.0,18.0,0.0
+baseline_no_pretrain_cross,1.2819,0.6333,0.6518,0.6329,0.7344,0.0,0.0,0.0,0.0,0.0,15.0,0.0
+denoised_and_masked_CNN_cross,1.3873,0.2667,0.2723,0.175,0.1319,0.0,0.0,0.0,0.0,0.0,6.0,0.0
+pretrained_transformer_denoised_cnn_intra,0.0202,1.0,1.0,1.0,1.0,0.0,0.0,0.0,0.0,0.0,24.0,0.0
+denoised_and_masked_CNN_intra,3.2699,0.25,0.25,0.25,0.25,0.0,0.0,0.0,0.0,0.0,32.0,0.0
+pretrained_transformer_denoised_cnn_cross,1.15,0.5333,0.5446,0.5319,0.5375,0.0,0.0,0.0,0.0,0.0,9.0,0.0
+denoised_cnn_only_cross,0.9306,0.6667,0.6652,0.6716,0.6959,0.0,0.0,0.0,0.0,0.0,16.0,0.0
+pretrained_transformer_masked_cnn_intra,0.2944,0.875,0.875,0.8667,0.9167,0.0,0.0,0.0,0.0,0.0,19.0,0.0
+pretrained_transformer_masked_cnn_cross,0.8482,0.7,0.7009,0.7185,0.7702,0.0,0.0,0.0,0.0,0.0,12.0,0.0
