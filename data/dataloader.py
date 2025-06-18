@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 import numpy as np
 import torch
@@ -205,31 +206,19 @@ class MEGVolumeDataset(Dataset):
 
 
 class MaskedMEGSequenceDataset(Dataset):
-    def __init__(self, root_dir, seq_len=100, mask_ratio=0.3, stride=None, noise_mask=None):
-        self.samples = []
+    def __init__(self, files: List[str], seq_len=100, mask_ratio=0.3, stride=None, noise_mask=None):
         self.seq_len = seq_len
+        self.files = files
         self.mask_ratio = mask_ratio
         self.noise_mask = noise_mask
         self.stride = stride if stride is not None else seq_len  # 💡 Store stride properly
         self.samples = []
         self.chunk_index = []
-        x = 0
-
-        for task_group in ['Intra', 'Cross']:
-            task_group_path = os.path.join(root_dir, task_group)
-            for subfolder in ['train']:
-                folder_path = os.path.join(task_group_path, subfolder)
-                if not os.path.exists(folder_path):
-                    continue
-                for file in os.listdir(folder_path):
-                    if file.endswith('.npy'):
-                        self.samples.append(os.path.join(folder_path, file))
-                        x += 1
+        
         self._index_volumes()
 
     def _index_volumes(self):
-
-        for file_path in self.samples:
+        for file_path in self.files:
             data = np.load(file_path, mmap_mode='r')
             volume_length = data.shape[0]
             for start in range(0, volume_length - self.seq_len + 1, self.stride):
@@ -277,7 +266,7 @@ if __name__ == "__main__":
         print(labels)         # (B,)
         break
 
-    masked_temporal_dataset = MaskedMEGSequenceDataset("./data/processed_data/", seq_len=10)
+    masked_temporal_dataset = MaskedMEGSequenceDataset(files = ["./data/processed_data/Intra/train/task_working_memory_105923_5.npy"], seq_len=10)
     loader = torch.utils.data.DataLoader(masked_temporal_dataset, batch_size=40, shuffle=True)
 
     for volumes in loader:
@@ -291,6 +280,8 @@ if __name__ == "__main__":
     for volumes in loader:
         inputs = volumes["input"][0]     # (T, 1, 20, 21)
         targets = volumes["target"][0]   # (T, 1, 20, 21)
+        mask = volumes["mask"][0]
+        print(mask)
         break
 
     T = inputs.shape[0]

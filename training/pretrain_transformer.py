@@ -12,6 +12,9 @@ from models.spatial_models import CNNFrameAutoencoder
 from models.sequence_models import TemporalTransformer
 from models.sequence_models import TransformerWithDecoder
 
+import random
+
+
 BATCH_SIZE = 64
 EPOCHS = 50
 LR = 1e-3
@@ -20,13 +23,28 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 PRINT_EVERY = 1
 VAL_SPLIT = 0.2
 
-full_dataset = MaskedMEGSequenceDataset("./data/processed_data/", seq_len=100, mask_ratio=0.3, stride = 25)
-val_len = int(VAL_SPLIT * len(full_dataset))
-train_len = len(full_dataset) - val_len
-train_set, val_set = random_split(full_dataset, [train_len, val_len])
+all_files = []
+root_dir = "./data/processed_data/"
 
-print(f"Total sequences: {len(full_dataset)}")
-print(f"Train: {len(train_set)}, Val: {len(val_set)}")
+for task_group in ['Intra', 'Cross']:
+    task_group_path = os.path.join(root_dir, task_group)
+    for subfolder in ['train']:
+        folder_path = os.path.join(task_group_path, subfolder)
+        if not os.path.exists(folder_path):
+            continue
+        for file in os.listdir(folder_path):
+            if file.endswith('.npy'):
+                all_files.append(os.path.join(folder_path, file))
+
+random.shuffle(all_files)
+split_idx = int(len(all_files) * 0.8)
+train_files = all_files[:split_idx]
+val_files = all_files[split_idx:]
+
+train_set = MaskedMEGSequenceDataset(files=train_files, seq_len=100, stride=25)
+val_set = MaskedMEGSequenceDataset(files=val_files, seq_len=100, stride=25)
+
+print(f"Train: {len(train_set)} samples\nVal: {len(val_set)} samples")
 
 
 train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True)
