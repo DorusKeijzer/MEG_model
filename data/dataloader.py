@@ -1,411 +1,174 @@
 import os
-from typing import List
-
-import numpy as np
+import json
+from datetime import datetime
 import torch
-from torch.utils.data import Dataset, DataLoader, ConcatDataset
-from random import random, randint
-from utils import available_device, noise_mask
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset, random_split
+from tqdm import tqdm
+from data.dataloader import MEGVolumeDataset 
+from models.spatial_models import CNNFrameAutoencoder 
+from models.sequence_models import TemporalTransformer 
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import matplotlib.pyplot as plt
+import numpy as np
 
 
-class DenoisingCNNPretrainDataset(Dataset):
-    """Loads individual samples, with gaussian noise and clean"""
-    def __init__(self, npy_file, max_noise_std: float = 0.3, noise_mask=None):
-        self.max_noise_std = max_noise_std
-        self.data = np.load(npy_file, mmap_mode='r')
-        self.length = self.data.shape[0]
+def evaluate(model_cnn, model_transformer, dataloader, criterion, device):
+    model_cnn.eval()
+    model_transformer.eval()
 
-        if noise_mask is not None:
-            self.noise_mask = torch.tensor(noise_mask, dtype=torch.float32)
-        else:
-            self.noise_mask = None
+    all_preds, all_labels = [], []
+    val_loss = 0.0
 
-    def __len__(self):
-        return self.length
+    with torch.no_grad():
+        for x, y in dataloader:
+            x, y = x.to(device), y.to(device)
+            _, z = model_cnn(x)
+            logits = model_transformer(z)
 
-    def __getitem__(self, idx):
-        clean_frame = torch.from_numpy(self.data[idx].copy()).float()
-        frame_tensor = clean_frame.unsqueeze(0).unsqueeze(0)
+            loss = criterion(logits, y)
+            val_loss += loss.item()
 
-        noise = torch.randn_like(clean_frame) * random() * self.max_noise_std
-        if self.noise_mask is not None:
-            noise = noise * self.noise_mask
+            preds = torch.argmax(logits, dim=1)
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(y.cpu().numpy())
 
-        noisy_frame = (clean_frame + noise).unsqueeze(0).unsqueeze(0)
-        return frame_tensor, noisy_frame
+    val_loss /= len(dataloader)
+    acc = accuracy_score(all_labels, all_preds)
+    recall = recall_score(all_labels, all_preds, average='macro')
+    precision = precision_score(all_labels, all_preds, average='macro')
+    f1 = f1_score(all_labels, all_preds, average='macro')
 
+    return val_loss, acc, recall, f1, precision
 
-def get_denoising_cnn_pretrain_dataset(batch_size=64, shuffle=True, noise_mask=None):
-    file_path = "./data/processed_data/"
-    datasets = []
-    for task in ["Cross", "Intra"]:
-        for subdir in os.listdir(os.path.join(file_path, task)):
-            full_subdir = os.path.join(file_path, task, subdir)
-            if os.path.isdir(full_subdir) and "test" not in subdir:
-                for file in os.listdir(full_subdir):
-                    if file.endswith(".npy"):
-                        full_path = os.path.join(full_subdir, file)
-                        datasets.append(DenoisingCNNPretrainDataset(full_path, noise_mask=noise_mask))
+def load_weights(model_cnn, model_transformer, cnn_path=None, transformer_path=None):
+    if cnn_path and os.path.exists(cnn_path):
+        print(f"Loading CNN weights from {cnn_path}")
+        model_cnn.load_state_dict(torch.load(cnn_path))
+    if transformer_path and os.path.exists(transformer_path):
+        print(f"Loading Transformer weights from {transformer_path}")
+        model_transformer.load_state_dict(torch.load(transformer_path))
 
-    ds = ConcatDataset(datasets)
-    print(f"Length of combined dataset: {len(ds)}")
-    print(f"Batches (batch size {batch_size}): {len(ds)/batch_size}")
-    return ds
+def save_metrics_json(metrics, save_path):
+    with open(save_path, 'w') as f:
+        json.dump(metrics, f, indent=4)
 
+def main():
+    import argparse
 
-class MaskingCNNPretrainDataset(Dataset):
-    """Loads individual samples, with random masking and clean"""
-    def __init__(self, npy_file, noise_mask=None):
-        self.data = np.load(npy_file, mmap_mode='r')
-        self.noise_mask = torch.tensor(noise_mask, dtype=torch.float32) if noise_mask is not None else None
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, default='configs/ablation_configs.json',
+                        help="Path to ablation config JSON")
 
-    def __len__(self):
-        return self.data.shape[0]
+    args = parser.parse_args()
 
-    def __getitem__(self, idx):
-        clean_frame = torch.tensor(self.data[idx], dtype=torch.float32)
-        mask = (torch.rand((20, 21)) < 0.8).float()
-        if self.noise_mask is not None:
-            mask = mask * self.noise_mask
-        masked_frame = clean_frame * mask
-        return clean_frame.unsqueeze(0), masked_frame.unsqueeze(0)
+    with open(args.config, 'r') as f:
+        experiment_configs = json.load(f)
+    print(f"Running ablation study from config: {args.config}")
 
+    for run_idx, config in enumerate(experiment_configs["experiments"]):
+        repeats = config.get("repeats", 1)
 
-def get_masked_cnn_pretrain_dataset(batch_size=64, shuffle=True, noise_mask=None):
-    file_path = "./data/processed_data/"
-    datasets = []
-    for task in ["Cross", "Intra"]:
-        for subdir in os.listdir(os.path.join(file_path, task)):
-            full_subdir = os.path.join(file_path, task, subdir)
-            if os.path.isdir(full_subdir) and "test" not in subdir:
-                for file in os.listdir(full_subdir):
-                    if file.endswith(".npy"):
-                        full_path = os.path.join(full_subdir, file)
-                        datasets.append(MaskingCNNPretrainDataset(full_path, noise_mask=noise_mask))
+        for task_group_choice in ["Intra", "Cross"]:
+            exp_name = f"{config['name']}_{task_group_choice}"
+            print(f"\nExperiment {run_idx+1}/{len(experiment_configs['experiments'])}: {exp_name} — {repeats} repeat(s)")
 
-    ds = ConcatDataset(datasets)
-    print(f"Length of combined masked dataset: {len(ds)}")
-    return ds
+            for repeat_idx in range(repeats):
+                print(f"\n--- Task: {task_group_choice} | Repeat {repeat_idx+1}/{repeats} ---")
 
+                # Setup device
+                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+                # Model + Load Pretrained Weights if specified
+                model_cnn = CNNFrameAutoencoder(embed_dim=config["embed_dim"]).to(device)
+                model_transformer = TemporalTransformer(embed_dim=config["embed_dim"], num_classes=config["num_classes"]).to(device)
+                load_weights(model_cnn, model_transformer, config.get("cnn_weights"), config.get("transformer_weights"))
 
+                # Dataset for current task group
+                dataset = MEGVolumeDataset(config["dataset_path"], mode='train', task_group_choice=task_group_choice)
+                train_size = int(config["train_split"] * len(dataset))
+                val_size = len(dataset) - train_size
+                train_set, val_set = random_split(dataset, [train_size, val_size])
+                train_loader = DataLoader(train_set, batch_size=config["batch_size"], shuffle=True, num_workers=2, pin_memory=True)
+                val_loader = DataLoader(val_set, batch_size=config["batch_size"], num_workers=2, pin_memory=True)
 
-class MaskedNoisyCNNPretrainDataset(Dataset):
-    """Combines both masking and noise on the same input frame"""
-    def __init__(self, npy_file, max_noise_std: float = 0.3, noise_mask=None):
-        self.data = np.load(npy_file, mmap_mode='r')
-        self.max_noise_std = max_noise_std
-        self.noise_mask = torch.tensor(noise_mask, dtype=torch.float32) if noise_mask is not None else None
+                # Optimizer & Criterion
+                optimizer = optim.Adam(list(model_cnn.parameters()) + list(model_transformer.parameters()), lr=config["lr"])
+                criterion = nn.CrossEntropyLoss()
 
-    def __len__(self):
-        return self.data.shape[0]
+                # Train loop
+                metrics = {
+                    "train_loss": [], "train_acc": [], "train_recall": [], "train_f1": [], "train_prec": [],
+                    "val_loss": [], "val_acc": [], "val_recall": [], "val_f1": [], "val_prec": []
+                }
 
-    def __getitem__(self, idx):
-        clean_frame = torch.tensor(self.data[idx], dtype=torch.float32)
+                best_val_loss = float('inf')
+                wait, patience = 0, config.get("patience", 5)
 
-        noise = torch.randn_like(clean_frame) * random() * self.max_noise_std
-        if self.noise_mask is not None:
-            noise = noise * self.noise_mask
+                for epoch in range(config["num_epochs"]):
+                    print(f"\nEpoch {epoch+1}/{config['num_epochs']} for run: {exp_name}, repeat: {repeat_idx+1}")
+                    model_cnn.train()
+                    model_transformer.train()
+                    
+                    train_loss, all_preds, all_labels = 0.0, [], []
+                    for x, y in tqdm(train_loader):
+                        x, y = x.to(device), y.to(device)
+                        _, z = model_cnn(x)
+                        logits = model_transformer(z)
 
-        masked = (torch.rand_like(clean_frame) < 0.8).float()
-        if self.noise_mask is not None:
-            masked = masked * self.noise_mask
+                        loss = criterion(logits, y)
+                        optimizer.zero_grad()
+                        loss.backward()
+                        optimizer.step()
 
-        noisy_masked = (clean_frame + noise) * masked
+                        train_loss += loss.item()
+                        preds = torch.argmax(logits, dim=1)
+                        all_preds.extend(preds.cpu().numpy())
+                        all_labels.extend(y.cpu().numpy())
 
-        return clean_frame.unsqueeze(0), noisy_masked.unsqueeze(0)
+                    # Log Train Metrics
+                    train_loss /= len(train_loader)
+                    metrics["train_loss"].append(train_loss)
+                    metrics["train_acc"].append(accuracy_score(all_labels, all_preds))
+                    metrics["train_prec"].append(precision_score(all_labels, all_preds, average="macro"))
+                    metrics["train_recall"].append(recall_score(all_labels, all_preds, average="macro"))
+                    metrics["train_f1"].append(f1_score(all_labels, all_preds, average="macro"))
 
+                    # Eval
+                    val_loss, val_acc, val_recall, val_f1, val_prec = evaluate(
+                        model_cnn, model_transformer, val_loader, criterion, device
+                    )
+                    metrics["val_loss"].append(val_loss)
+                    metrics["val_acc"].append(val_acc)
+                    metrics["val_recall"].append(val_recall)
+                    metrics["val_prec"].append(val_prec)
+                    metrics["val_f1"].append(val_f1)
 
-def get_masked_noisy_cnn_pretrain_dataset(batch_size=64, shuffle=True, noise_mask=None):
-    file_path = "./data/processed_data/"
-    datasets = []
-    for task in ["Cross", "Intra"]:
-        for subdir in os.listdir(os.path.join(file_path, task)):
-            full_subdir = os.path.join(file_path, task, subdir)
-            if os.path.isdir(full_subdir) and "test" not in subdir:
-                for file in os.listdir(full_subdir):
-                    if file.endswith(".npy"):
-                        full_path = os.path.join(full_subdir, file)
-                        datasets.append(MaskedNoisyCNNPretrainDataset(full_path, noise_mask=noise_mask))
+                    print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Acc: {val_acc:.4f} | F1: {val_f1:.4f}")
 
-    ds = ConcatDataset(datasets)
-    print(f"Length of combined masked+noisy dataset: {len(ds)}")
-    return ds
+                    # Early Stop
+                    if val_loss < best_val_loss:
+                        best_val_loss = val_loss
+                        wait = 0
+                        torch.save({
+                            'cnn_state_dict': model_cnn.state_dict(),
+                            'transformer_state_dict': model_transformer.state_dict(),
+                        }, os.path.join(config["save_dir"], f"{exp_name}_run{repeat_idx}_best_model.pt"))
+                        print("Best model saved!")
+                    else:
+                        wait += 1
+                        if wait >= patience:
+                            print("Early stopping triggered.")
+                            break
 
+                # Save final metrics per repeat and task group
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                json_save_path = os.path.join(config["save_dir"], f"{exp_name}_metrics_run{repeat_idx}_{timestamp}.json")
+                save_metrics_json(metrics, json_save_path)
 
-class MEGVolumeDataset(Dataset):
-    TASK_LABELS = {
-        'rest': 0,
-        'task_motor': 1,
-        'task_story_math': 2,
-        'task_working_memory': 3
-    }
-    
-    def __init__(self, root_dir, mode='train'):
-        self.samples = []
-        
-        for task_group in ['Intra', 'Cross']:
-            task_group_path = os.path.join(root_dir, task_group)
-            
-            subfolders = ['train'] if mode == 'train' else ['test'] if task_group == 'Intra' else ['test1', 'test2', 'test3']
-            
-            for subfolder in subfolders:
-                print(subfolder)
+                print(f"Finished run: {exp_name}, repeat: {repeat_idx+1}, results saved to {json_save_path}")
 
-
-                folder_path = os.path.join(task_group_path, subfolder)
-                if not os.path.exists(folder_path):
-                    continue
-                
-                for file in os.listdir(folder_path):
-
-                    if file.endswith('.npy'):
-                        # Parsing label logic
-                        filename = file.lower()
-                        
-                        if filename.startswith('rest'):
-                            label = self.TASK_LABELS['rest']
-                        else:
-                            # Non-resting: filenames start with "task_"
-                            # Extract full task name prefix before subjectID/number parts
-                            parts = filename.split('_')
-                            # gather first two parts: task and the actual task type words, eg ['task', 'motor', ...]
-                            # task label could be multiple words joined by underscore: e.g. task_story_math
-                            # so try to reconstruct task label by joining parts until numeric hit
-                            
-                            first_num_idx = None
-                            for i, p in enumerate(parts):
-                                if p.isdigit():
-                                    first_num_idx = i
-                                    break
-                            if first_num_idx is None:
-                                # no digit found, skip this file just in case
-                                continue
-                            
-                            task_name = '_'.join(parts[:first_num_idx])
-                            label = self.TASK_LABELS.get(task_name, None)
-                            if label is None:
-                                # skip unknown labels
-                                continue
-                        
-                        full_path = os.path.join(folder_path, file)
-                        self.samples.append((full_path, label))
-    
-    def __len__(self):
-        return len(self.samples)
-    
-    def __getitem__(self, idx):
-        path, label = self.samples[idx]
-        volume = np.load(path)  # shape: (20, 21, T)
-        
-        volume = torch.tensor(volume, dtype=torch.float32)  # (20, 21, T)
-        volume = volume.permute(2, 0, 1).unsqueeze(1)       # (T, 1, 20, 21)
-        
-        return volume, label
-
-
-
-class MaskedMEGSequenceDataset(Dataset):
-    def __init__(
-        self,
-        files: List[str],
-        min_seq_len: int = 100,
-        max_seq_len: int = 3000,
-        mask_ratio: float = 0.3,
-        max_mask_blocks: int = 5,
-        chunk_sizes: List[int] = [100, 250, 500, 1000, 2000, 3000],
-        chunk_strides: List[int] = None,
-        noise_std: float = 0.2
-    ):
-        self.files = files
-        self.min_seq_len = min_seq_len
-        self.max_seq_len = max_seq_len
-        self.mask_ratio = mask_ratio
-        self.max_mask_blocks = max_mask_blocks
-        self.chunk_sizes = [s for s in chunk_sizes if s >= min_seq_len and s <= max_seq_len]
-        self.chunk_strides = chunk_strides or [s // 2 for s in self.chunk_sizes]
-        self.noise_std = noise_std
-
-        self.chunk_index = []
-        self._index_volumes()
-
-    def _index_volumes(self):
-        for file_path in self.files:
-            data = np.load(file_path, mmap_mode='r')
-            volume_length = data.shape[0]
-
-            for seq_len, stride in zip(self.chunk_sizes, self.chunk_strides):
-                if volume_length < seq_len:
-                    continue
-
-                for start in range(0, volume_length - seq_len + 1, stride):
-                    self.chunk_index.append((file_path, start, seq_len))
-
-    def __len__(self):
-        return len(self.chunk_index)
-
-    def __getitem__(self, idx):
-        file_path, start_idx, seq_len = self.chunk_index[idx]
-        data = np.load(file_path, mmap_mode='r')[start_idx:start_idx + seq_len]  # (T, 20, 21)
-
-        data = torch.tensor(data, dtype=torch.float32).unsqueeze(1)  # (T, 1, 20, 21)
-        mask = torch.zeros(seq_len, dtype=torch.bool)
-
-        total_to_mask = int(seq_len * self.mask_ratio)
-
-        g = torch.Generator()
-        g.manual_seed(torch.randint(0, 2**32 - 1, (1,)).item())
-
-        remaining = total_to_mask
-        blocks = 0
-        while remaining > 0 and blocks < self.max_mask_blocks:
-            max_block_size = remaining
-            block_size = torch.randint(1, max_block_size + 1, (1,), generator=g).item()
-            start = torch.randint(0, seq_len - block_size + 1, (1,), generator=g).item()
-
-            if not mask[start:start + block_size].any():
-                mask[start:start + block_size] = True
-                remaining -= block_size
-                blocks += 1
-
-        masked_data = data.clone()
-        masked_data[mask] = 0.0
-        noise = torch.randn_like(data) * self.noise_std * noise_mask
-        masked_data[~mask] += noise[~mask]
-
-        return {
-            'input': masked_data,   # (T, 1, 20, 21)
-            'mask': mask,           # (T,)
-            'target': data,         # (T, 1, 20, 21)
-            'seq_len': seq_len,     # int
-        }
 
 if __name__ == "__main__":
-    # sanity checks and visualizing
-    from matplotlib import pyplot as plt
-
-    
-    dataset = MEGVolumeDataset("./data/processed_data/", mode='train')
-    loader = torch.utils.data.DataLoader(dataset, batch_size=4, shuffle=True)
-
-    for volumes, labels in loader:
-        print(volumes.shape)  # (B, T, 1, 20, 21)
-        print(labels)         # (B,)
-        break
-    
-
-    def collate_fn_padded(batch):
-        # batch is a list of dicts: each dict has keys 'input', 'mask', 'target', 'seq_len'
-
-        max_len = max(item['seq_len'] for item in batch)
-
-        batch_size = len(batch)
-        # input, target shapes: (T, 1, 20, 21)
-        # mask shape: (T,)
-
-        # Prepare empty padded tensors
-        inputs_padded = torch.zeros((batch_size, max_len, 1, 20, 21), dtype=torch.float32)
-        targets_padded = torch.zeros_like(inputs_padded)
-        masks_padded = torch.zeros((batch_size, max_len), dtype=torch.bool)
-
-        for i, item in enumerate(batch):
-            seq_len = item['seq_len']
-            inputs_padded[i, :seq_len] = item['input']
-            targets_padded[i, :seq_len] = item['target']
-            masks_padded[i, :seq_len] = item['mask']
-
-        return {
-            'input': inputs_padded,
-            'target': targets_padded,
-            'mask': masks_padded,
-            'seq_len': torch.tensor([item['seq_len'] for item in batch], dtype=torch.int)
-        }
-
-
-
-
-    masked_temporal_dataset = MaskedMEGSequenceDataset(files = ["./data/processed_data/Intra/train/task_working_memory_105923_5.npy"], min_seq_len=100, max_seq_len=300, mask_ratio=0.3, max_mask_blocks=2)
-    loader = torch.utils.data.DataLoader(masked_temporal_dataset, batch_size=40, shuffle=True, collate_fn=collate_fn_padded)
-
-    for volumes in loader:
-        print(volumes["input"].shape)  # (B, T, 1, 20, 21)
-        print(volumes["mask"].shape)  # (B, T,)
-        print(volumes["target"].shape)  # (B, T, 1, 20, 21)
-        break
-
-
-        # Get a single sequence
-    for volumes in loader:
-        inputs = volumes["input"][0]     # (T, 1, 20, 21)
-        targets = volumes["target"][0]   # (T, 1, 20, 21)
-        mask = volumes["mask"][0]
-        print(mask)
-        break
-
-    T = min(10, inputs.shape[0])
-
-    fig, axes = plt.subplots(2, T, figsize=(T * 2, 4))  # 2 rows: input + target
-
-    for t in range(T):
-        # Top row: input
-        axes[0, t].imshow(inputs[t, 0], cmap='viridis')
-        axes[0, t].set_title(f"Input T{t}")
-        axes[0, t].axis('off')
-        
-        # Bottom row: target
-        axes[1, t].imshow(targets[t, 0], cmap='viridis')
-        axes[1, t].set_title(f"Target T{t}")
-        axes[1, t].axis('off')
-
-    plt.tight_layout()
-    plt.show()
-
-
-
-    # compare noisy + clean frames
-
-    file = "data/processed_data/Cross/test3/task_working_memory_735148_4.npy"
-    noidedset = get_denoising_cnn_pretrain_dataset(noise_mask=noise_mask)
-    maskedset = get_masked_cnn_pretrain_dataset(noise_mask=noise_mask)
-    bothset = get_masked_noisy_cnn_pretrain_dataset(noise_mask=noise_mask)
-    noided = DataLoader(noidedset)
-    masked = DataLoader(maskedset)
-    bothed = DataLoader(bothset)
-    
-
-    # Pick one loader for visualization
-    for name, task in zip(["gaussian noise", "random masking", "both masking and noise"], [noided, masked, bothed]):
-
-        clean, noisy = next(iter(task))  # get batch
-        print(clean.shape)
-        print(noisy.shape)
-        batch_size = clean.shape[0]
-        num_samples = min(8, batch_size)  # use smaller of 8 or actual batch size
-
-        clean = clean[:num_samples]
-        noisy = noisy[:num_samples]
-
-        fig, axs = plt.subplots(nrows=num_samples, ncols=3, figsize=(6, 2 * num_samples))
-        axs = axs.reshape(num_samples, 3)  # force axs to 2D array
-
-        fig.suptitle(name, fontsize=16)
-
-        for row in range(num_samples):
-            clean_img = clean[row].squeeze().cpu().numpy()
-            noisy_img = noisy[row].squeeze().cpu().numpy()
-            noise_img = (noisy[row] - clean[row]).squeeze().cpu().numpy()
-
-            axs[row, 0].imshow(clean_img, cmap='viridis')
-            axs[row, 0].set_title("Clean")
-            axs[row, 0].axis('off')
-
-            axs[row, 1].imshow(noisy_img, cmap='viridis')
-            axs[row, 1].set_title("Noisy")
-            axs[row, 1].axis('off')
-
-            axs[row, 2].imshow(noise_img, cmap='viridis')
-            axs[row, 2].set_title("noise (noisy-clean)")
-            axs[row, 2].axis('off')
-
-        plt.tight_layout()
-        plt.show()
+    main()
