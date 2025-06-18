@@ -51,6 +51,12 @@ train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True)
 val_loader = DataLoader(val_set, batch_size=BATCH_SIZE)
 
 autoencoder = CNNFrameAutoencoder(embed_dim=256).to(DEVICE)
+
+# freeze autoncoder
+for p in autoencoder.parameters():
+    p.requires_grad = False
+autoencoder.eval()
+
 transformer = TemporalTransformer(embed_dim=256).to(DEVICE)
 model = TransformerWithDecoder(transformer, embed_dim=256).to(DEVICE)
 
@@ -69,6 +75,8 @@ for epoch in range(EPOCHS):
         inputs = batch['input'].to(DEVICE)       # (B, T, 1, 20, 21)
         masks = batch['mask'].to(DEVICE)         # (B, T)
         targets = batch['target'].to(DEVICE)     # (B, T, 1, 20, 21)
+        print("Masked frames per sample:", masks.sum(dim=1).float().mean().item())
+
 
         _, embeddings = autoencoder(inputs)      # (B, T, D)
         preds, true = model.forward_for_pretraining(embeddings, masks)
