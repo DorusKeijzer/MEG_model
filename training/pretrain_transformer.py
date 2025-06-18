@@ -1,19 +1,17 @@
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
-import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 import os
+import json
 import numpy as np
+import random
 
 from data.dataloader import MaskedMEGSequenceDataset
 from models.spatial_models import CNNFrameAutoencoder
-from models.sequence_models import TemporalTransformer
-from models.sequence_models import TransformerWithDecoder
-
-import random
-
+from models.sequence_models import TemporalTransformer, TransformerWithDecoder
 
 BATCH_SIZE = 4
 EPOCHS = 50
@@ -23,17 +21,10 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 PRINT_EVERY = 1
 VAL_SPLIT = 0.2
 
-
 def collate_fn_padded(batch):
-    # batch is a list of dicts: each dict has keys 'input', 'mask', 'target', 'seq_len'
-
     max_len = max(item['seq_len'] for item in batch)
-
     batch_size = len(batch)
-    # input, target shapes: (T, 1, 20, 21)
-    # mask shape: (T,)
 
-    # Prepare empty padded tensors
     inputs_padded = torch.zeros((batch_size, max_len, 1, 20, 21), dtype=torch.float32)
     targets_padded = torch.zeros_like(inputs_padded)
     masks_padded = torch.zeros((batch_size, max_len), dtype=torch.bool)
@@ -51,10 +42,22 @@ def collate_fn_padded(batch):
         'seq_len': torch.tensor([item['seq_len'] for item in batch], dtype=torch.int)
     }
 
+def save_visualization(preds, targets, mask, epoch, batch_idx, save_dir='./visualizations'):
+    os.makedirs(save_dir, exist_ok=True)
+    preds_np = preds.cpu().numpy()
+    targets_np = targets.cpu().numpy()
+    mask_indices = torch.nonzero(mask, as_tuple=False).cpu().tolist()
 
+    np.save(os.path.join(save_dir, f'epoch{epoch}_batch{batch_idx}_preds.npy'), preds_np)
+    np.save(os.path.join(save_dir, f'epoch{epoch}_batch{batch_idx}_targets.npy'), targets_np)
+    with open(os.path.join(save_dir, f'epoch{epoch}_batch{batch_idx}_mask_indices.json'), 'w') as f:
+        json.dump(mask_indices, f)
+
+    print(f"Saved visualization for epoch {epoch} batch {batch_idx} at {save_dir}")
+
+# Load files
 all_files = []
 root_dir = "./data/processed_data/"
-
 for task_group in ['Intra', 'Cross']:
     task_group_path = os.path.join(root_dir, task_group)
     for subfolder in ['train']:
@@ -75,13 +78,10 @@ val_set = MaskedMEGSequenceDataset(files=val_files, max_seq_len=3000, min_seq_le
 
 print(f"Train: {len(train_set)} samples\nVal: {len(val_set)} samples")
 
-
 train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn_padded)
 val_loader = DataLoader(val_set, batch_size=BATCH_SIZE, collate_fn=collate_fn_padded)
 
 autoencoder = CNNFrameAutoencoder(embed_dim=256).to(DEVICE)
-
-# freeze autoncoder
 for p in autoencoder.parameters():
     p.requires_grad = False
 autoencoder.eval()
@@ -100,14 +100,21 @@ early_stop_counter = 0
 for epoch in range(EPOCHS):
     model.train()
     total_train_loss = 0
-    for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS} - Training"):
+
+    for batch_idx, batch in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS} - Training")):
         inputs = batch['input'].to(DEVICE)       # (B, T, 1, 20, 21)
         masks = batch['mask'].to(DEVICE)         # (B, T)
         targets = batch['target'].to(DEVICE)     # (B, T, 1, 20, 21)
 
+        with torch.no_grad():
+            _, embeddings = autoencoder(inputs)  # (B, T, D)
 
-        _, embeddings = autoencoder(inputs)      # (B, T, D)
         preds, true = model.forward_for_pretraining(embeddings, masks)
+
+        # Sanity check: make sure we have masked tokens, else skip
+        if preds.shape[0] == 0:
+            print(f"Warning: No masked tokens in epoch {epoch} batch {batch_idx}, skipping loss.")
+            continue
 
         loss = criterion(preds, true)
 
@@ -117,13 +124,17 @@ for epoch in range(EPOCHS):
 
         total_train_loss += loss.item()
 
-    avg_train_loss = total_train_loss / len(train_loader)
+        # Save first batch every 5 epochs for visualization
+        if batch_idx == 0 and epoch % 5 == 0:
+            save_visualization(preds, true, masks.view(-1), epoch, batch_idx)
+
+    avg_train_loss = total_train_loss / (batch_idx + 1)
     train_losses.append(avg_train_loss)
 
     model.eval()
     total_val_loss = 0
     with torch.no_grad():
-        for batch in tqdm(val_loader, desc="Validation"):
+        for val_batch_idx, batch in enumerate(tqdm(val_loader, desc="Validation")):
             inputs = batch['input'].to(DEVICE)
             masks = batch['mask'].to(DEVICE)
             targets = batch['target'].to(DEVICE)
@@ -131,10 +142,13 @@ for epoch in range(EPOCHS):
             _, embeddings = autoencoder(inputs)
             preds, true = model.forward_for_pretraining(embeddings, masks)
 
+            if preds.shape[0] == 0:
+                continue
+
             loss = criterion(preds, true)
             total_val_loss += loss.item()
 
-    avg_val_loss = total_val_loss / len(val_loader)
+    avg_val_loss = total_val_loss / (val_batch_idx + 1)
     val_losses.append(avg_val_loss)
 
     print(f"Epoch {epoch+1}: Train Loss = {avg_train_loss:.4f} | Val Loss = {avg_val_loss:.4f}")
@@ -148,13 +162,3 @@ for epoch in range(EPOCHS):
         if early_stop_counter >= PATIENCE:
             print("Early stopping triggered.")
             break
-
-plt.plot(train_losses, label='Train Loss')
-plt.plot(val_losses, label='Validation Loss')
-plt.legend()
-plt.title("Pretraining Loss")
-plt.xlabel("Epoch")
-plt.ylabel("Loss")
-plt.savefig("pretraining_loss.png")
-plt.show()
-

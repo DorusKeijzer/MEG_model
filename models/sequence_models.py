@@ -62,6 +62,8 @@ class TransformerWithDecoder(nn.Module):
         decoded = self.decoder_head(x)  # (B, T, D)
 
         masked_preds = decoded[mask]         # (N_masked, D)
+        if masked_preds.numel() == 0:
+            print("GOON")
         masked_targets = embeddings[mask]    # (N_masked, D)
         return masked_preds, masked_targets
 
