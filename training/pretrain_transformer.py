@@ -23,6 +23,35 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 PRINT_EVERY = 1
 VAL_SPLIT = 0.2
 
+
+def collate_fn_padded(batch):
+    # batch is a list of dicts: each dict has keys 'input', 'mask', 'target', 'seq_len'
+
+    max_len = max(item['seq_len'] for item in batch)
+
+    batch_size = len(batch)
+    # input, target shapes: (T, 1, 20, 21)
+    # mask shape: (T,)
+
+    # Prepare empty padded tensors
+    inputs_padded = torch.zeros((batch_size, max_len, 1, 20, 21), dtype=torch.float32)
+    targets_padded = torch.zeros_like(inputs_padded)
+    masks_padded = torch.zeros((batch_size, max_len), dtype=torch.bool)
+
+    for i, item in enumerate(batch):
+        seq_len = item['seq_len']
+        inputs_padded[i, :seq_len] = item['input']
+        targets_padded[i, :seq_len] = item['target']
+        masks_padded[i, :seq_len] = item['mask']
+
+    return {
+        'input': inputs_padded,
+        'target': targets_padded,
+        'mask': masks_padded,
+        'seq_len': torch.tensor([item['seq_len'] for item in batch], dtype=torch.int)
+    }
+
+
 all_files = []
 root_dir = "./data/processed_data/"
 
@@ -47,8 +76,8 @@ val_set = MaskedMEGSequenceDataset(files=val_files, max_seq_len=3000, min_seq_le
 print(f"Train: {len(train_set)} samples\nVal: {len(val_set)} samples")
 
 
-train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True)
-val_loader = DataLoader(val_set, batch_size=BATCH_SIZE)
+train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn_padded)
+val_loader = DataLoader(val_set, batch_size=BATCH_SIZE, collate_fn=collate_fn_padded)
 
 autoencoder = CNNFrameAutoencoder(embed_dim=256).to(DEVICE)
 

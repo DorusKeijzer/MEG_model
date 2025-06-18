@@ -204,6 +204,7 @@ class MEGVolumeDataset(Dataset):
         return volume, label
 
 
+
 class MaskedMEGSequenceDataset(Dataset):
     def __init__(
         self,
@@ -212,12 +213,17 @@ class MaskedMEGSequenceDataset(Dataset):
         max_seq_len: int = 3000,
         mask_ratio: float = 0.3,
         max_mask_blocks: int = 5,
+        chunk_sizes: List[int] = [100, 250, 500, 1000, 2000, 3000],
+        chunk_strides: List[int] = None,
     ):
         self.files = files
         self.min_seq_len = min_seq_len
         self.max_seq_len = max_seq_len
         self.mask_ratio = mask_ratio
         self.max_mask_blocks = max_mask_blocks
+        self.chunk_sizes = [s for s in chunk_sizes if s >= min_seq_len and s <= max_seq_len]
+        self.chunk_strides = chunk_strides or [s // 2 for s in self.chunk_sizes]
+
         self.chunk_index = []
         self._index_volumes()
 
@@ -226,23 +232,19 @@ class MaskedMEGSequenceDataset(Dataset):
             data = np.load(file_path, mmap_mode='r')
             volume_length = data.shape[0]
 
-            # Only index volumes large enough
-            if volume_length >= self.min_seq_len:
-                self.chunk_index.append((file_path, volume_length))
+            for seq_len, stride in zip(self.chunk_sizes, self.chunk_strides):
+                if volume_length < seq_len:
+                    continue
+
+                for start in range(0, volume_length - seq_len + 1, stride):
+                    self.chunk_index.append((file_path, start, seq_len))
 
     def __len__(self):
         return len(self.chunk_index)
 
     def __getitem__(self, idx):
-        file_path, volume_length = self.chunk_index[idx]
-        data = np.load(file_path, mmap_mode='r')
-
-        # Randomly sample a sequence length
-        seq_len = torch.randint(self.min_seq_len, min(volume_length, self.max_seq_len) + 1, (1,)).item()
-
-        # Random start position
-        start_idx = torch.randint(0, volume_length - seq_len + 1, (1,)).item()
-        data = data[start_idx:start_idx + seq_len]  # shape: (T, 20, 21)
+        file_path, start_idx, seq_len = self.chunk_index[idx]
+        data = np.load(file_path, mmap_mode='r')[start_idx:start_idx + seq_len]  # (T, 20, 21)
 
         data = torch.tensor(data, dtype=torch.float32).unsqueeze(1)  # (T, 1, 20, 21)
         mask = torch.zeros(seq_len, dtype=torch.bool)
@@ -259,20 +261,19 @@ class MaskedMEGSequenceDataset(Dataset):
             block_size = torch.randint(1, max_block_size + 1, (1,), generator=g).item()
             start = torch.randint(0, seq_len - block_size + 1, (1,), generator=g).item()
 
-            # Ensure block doesn't overlap
             if not mask[start:start + block_size].any():
                 mask[start:start + block_size] = True
                 remaining -= block_size
                 blocks += 1
 
         masked_data = data.clone()
-        masked_data[mask] = 0.0  # could use noise or learned tokens too
+        masked_data[mask] = 0.0
 
         return {
-            'input': masked_data,   # shape: (T, 1, 20, 21)
-            'mask': mask,           # shape: (T,)
-            'target': data,         # original full data
-            'seq_len': seq_len,     # useful for batching if variable-length
+            'input': masked_data,   # (T, 1, 20, 21)
+            'mask': mask,           # (T,)
+            'target': data,         # (T, 1, 20, 21)
+            'seq_len': seq_len,     # int
         }
 
 if __name__ == "__main__":
@@ -287,9 +288,40 @@ if __name__ == "__main__":
         print(volumes.shape)  # (B, T, 1, 20, 21)
         print(labels)         # (B,)
         break
+    
+
+    def collate_fn_padded(batch):
+        # batch is a list of dicts: each dict has keys 'input', 'mask', 'target', 'seq_len'
+
+        max_len = max(item['seq_len'] for item in batch)
+
+        batch_size = len(batch)
+        # input, target shapes: (T, 1, 20, 21)
+        # mask shape: (T,)
+
+        # Prepare empty padded tensors
+        inputs_padded = torch.zeros((batch_size, max_len, 1, 20, 21), dtype=torch.float32)
+        targets_padded = torch.zeros_like(inputs_padded)
+        masks_padded = torch.zeros((batch_size, max_len), dtype=torch.bool)
+
+        for i, item in enumerate(batch):
+            seq_len = item['seq_len']
+            inputs_padded[i, :seq_len] = item['input']
+            targets_padded[i, :seq_len] = item['target']
+            masks_padded[i, :seq_len] = item['mask']
+
+        return {
+            'input': inputs_padded,
+            'target': targets_padded,
+            'mask': masks_padded,
+            'seq_len': torch.tensor([item['seq_len'] for item in batch], dtype=torch.int)
+        }
+
+
+
 
     masked_temporal_dataset = MaskedMEGSequenceDataset(files = ["./data/processed_data/Intra/train/task_working_memory_105923_5.npy"], min_seq_len=100, max_seq_len=300, mask_ratio=0.3, max_mask_blocks=2)
-    loader = torch.utils.data.DataLoader(masked_temporal_dataset, batch_size=40, shuffle=True)
+    loader = torch.utils.data.DataLoader(masked_temporal_dataset, batch_size=40, shuffle=True, collate_fn=collate_fn_padded)
 
     for volumes in loader:
         print(volumes["input"].shape)  # (B, T, 1, 20, 21)
