@@ -245,7 +245,15 @@ class MaskedMEGSequenceDataset(Dataset):
         data = np.load(file_path, mmap_mode='r')[start_idx:start_idx + self.seq_len]
         data = torch.tensor(data, dtype=torch.float32).unsqueeze(1)  # (T, 1, 20, 21)
         
-        mask = torch.rand(self.seq_len) < self.mask_ratio  # (T,)
+        mask = torch.zeros(self.seq_len, dtype=torch.bool)
+        
+        # mask contiguous blocks
+        total_to_mask = int(self.seq_len * self.mask_ratio)
+        block_size = max(1, total_to_mask)  # You could also vary this
+        
+        start = torch.randint(0, self.seq_len - block_size + 1, (1,)).item()
+        mask[start:start + block_size] = True
+        
         masked_data = data.clone()
         masked_data[mask] = 0.0
 
@@ -254,7 +262,6 @@ class MaskedMEGSequenceDataset(Dataset):
             'mask': mask,                 # (T,)
             'target': data,               # (T, 1, 20, 21)
         }
-
 
 if __name__ == "__main__":
     # sanity checks and visualizing
