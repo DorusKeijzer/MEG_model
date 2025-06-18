@@ -210,8 +210,10 @@ class MaskedMEGSequenceDataset(Dataset):
         self.seq_len = seq_len
         self.mask_ratio = mask_ratio
         self.noise_mask = noise_mask
+        self.stride = stride if stride is not None else seq_len  # 💡 Store stride properly
         self.samples = []
         self.chunk_index = []
+        x = 0
 
         for task_group in ['Intra', 'Cross']:
             task_group_path = os.path.join(root_dir, task_group)
@@ -222,22 +224,21 @@ class MaskedMEGSequenceDataset(Dataset):
                 for file in os.listdir(folder_path):
                     if file.endswith('.npy'):
                         self.samples.append(os.path.join(folder_path, file))
-        self._index_volumes(stride)
+                        x += 1
+        self._index_volumes()
 
-    def _index_volumes(self, stride=None):
-        if stride is None:
-            stride = self.seq_len  # non-overlapping by default
+    def _index_volumes(self):
 
         for file_path in self.samples:
             data = np.load(file_path, mmap_mode='r')
             volume_length = data.shape[0]
-            for start in range(0, volume_length - self.seq_len + 1, stride):
-                print(start)
+            for start in range(0, volume_length - self.seq_len + 1, self.stride):
                 self.chunk_index.append((file_path, start))
+
         
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.chunk_index)
 
 
     def __getitem__(self, idx):

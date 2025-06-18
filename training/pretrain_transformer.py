@@ -25,6 +25,10 @@ val_len = int(VAL_SPLIT * len(full_dataset))
 train_len = len(full_dataset) - val_len
 train_set, val_set = random_split(full_dataset, [train_len, val_len])
 
+print(f"Total sequences: {len(full_dataset)}")
+print(f"Train: {len(train_set)}, Val: {len(val_set)}")
+
+
 train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True)
 val_loader = DataLoader(val_set, batch_size=BATCH_SIZE)
 
