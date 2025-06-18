@@ -44,9 +44,9 @@ def collate_fn_padded(batch):
 
 def save_visualization(preds, targets, mask, epoch, batch_idx, save_dir='./visualizations'):
     os.makedirs(save_dir, exist_ok=True)
-    preds_np = preds.cpu().numpy()
-    targets_np = targets.cpu().numpy()
-    mask_indices = torch.nonzero(mask, as_tuple=False).cpu().tolist()
+    preds_np = preds.detach().numpy()
+    targets_np = targets.detach().numpy()
+    mask_indices = torch.nonzero(mask, as_tuple=False).detach().tolist()
 
     np.save(os.path.join(save_dir, f'epoch{epoch}_batch{batch_idx}_preds.npy'), preds_np)
     np.save(os.path.join(save_dir, f'epoch{epoch}_batch{batch_idx}_targets.npy'), targets_np)
