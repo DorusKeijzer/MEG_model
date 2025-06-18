@@ -224,6 +224,7 @@ class MaskedMEGSequenceDataset(Dataset):
         self.max_mask_blocks = max_mask_blocks
         self.chunk_sizes = [s for s in chunk_sizes if s >= min_seq_len and s <= max_seq_len]
         self.chunk_strides = chunk_strides or [s // 2 for s in self.chunk_sizes]
+        self.noise_std = noise_std
 
         self.chunk_index = []
         self._index_volumes()
@@ -269,7 +270,7 @@ class MaskedMEGSequenceDataset(Dataset):
 
         masked_data = data.clone()
         masked_data[mask] = 0.0
-        noise = torch.randn_like(data) * noise_std
+        noise = torch.randn_like(data) * self.noise_std * noise_mask
         masked_data[~mask] += noise[~mask]
 
         return {
