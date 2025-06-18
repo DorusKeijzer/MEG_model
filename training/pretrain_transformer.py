@@ -42,18 +42,37 @@ def collate_fn_padded(batch):
         'seq_len': torch.tensor([item['seq_len'] for item in batch], dtype=torch.int)
     }
 
+from matplotlib import pyplot as plt
+
+
 def save_visualization(preds, targets, mask, epoch, batch_idx, save_dir='./visualizations'):
     os.makedirs(save_dir, exist_ok=True)
-    preds_np = preds.detach().cpu().numpy()
-    targets_np = targets.detach().cpu().numpy()
-    mask_indices = torch.nonzero(mask, as_tuple=False).cpu().tolist()
 
-    np.save(os.path.join(save_dir, f'epoch{epoch}_batch{batch_idx}_preds.npy'), preds_np)
-    np.save(os.path.join(save_dir, f'epoch{epoch}_batch{batch_idx}_targets.npy'), targets_np)
-    with open(os.path.join(save_dir, f'epoch{epoch}_batch{batch_idx}_mask_indices.json'), 'w') as f:
-        json.dump(mask_indices, f)
+    preds_np = preds.detach().cpu().numpy()       # (N_masked, D)
+    targets_np = targets.detach().cpu().numpy()   # (N_masked, D)
 
-    print(f"Saved visualization for epoch {epoch} batch {batch_idx} at {save_dir}")
+    # Just pick a few samples to visualize
+    num_samples = min(8, preds_np.shape[0])  # max 8 frames for clarity
+
+    fig, axes = plt.subplots(num_samples, 2, figsize=(6, num_samples * 3))
+
+    for i in range(num_samples):
+        ax_pred = axes[i, 0]
+        ax_true = axes[i, 1]
+
+        ax_pred.imshow(preds_np[i].reshape(16, 16), cmap='viridis')  # assuming D=256
+        ax_pred.set_title("Predicted")
+        ax_pred.axis('off')
+
+        ax_true.imshow(targets_np[i].reshape(16, 16), cmap='viridis')  # reshape to visual 2D
+        ax_true.set_title("Ground Truth")
+        ax_true.axis('off')
+
+    plt.tight_layout()
+    out_path = os.path.join(save_dir, f'epoch{epoch}_batch{batch_idx}_viz.png')
+    plt.savefig(out_path)
+    plt.close()
+    print(f"Saved visualization to {out_path}")
 
 # Load files
 all_files = []
@@ -125,7 +144,7 @@ for epoch in range(EPOCHS):
         total_train_loss += loss.item()
 
         # Save first batch every 5 epochs for visualization
-        if batch_idx == 0 and epoch % 5 == 0:
+        if batch_idx == 40: 
             save_visualization(preds, true, masks.view(-1), epoch, batch_idx)
 
     avg_train_loss = total_train_loss / (batch_idx + 1)
