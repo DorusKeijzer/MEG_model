@@ -215,6 +215,7 @@ class MaskedMEGSequenceDataset(Dataset):
         max_mask_blocks: int = 5,
         chunk_sizes: List[int] = [100, 250, 500, 1000, 2000, 3000],
         chunk_strides: List[int] = None,
+        noise_std: float = 0.2
     ):
         self.files = files
         self.min_seq_len = min_seq_len
@@ -268,6 +269,8 @@ class MaskedMEGSequenceDataset(Dataset):
 
         masked_data = data.clone()
         masked_data[mask] = 0.0
+        noise = torch.randn_like(data) * noise_std
+        masked_data[~mask] += noise[~mask]
 
         return {
             'input': masked_data,   # (T, 1, 20, 21)
