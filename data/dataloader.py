@@ -204,58 +204,76 @@ class MEGVolumeDataset(Dataset):
         return volume, label
 
 
-
 class MaskedMEGSequenceDataset(Dataset):
-    def __init__(self, files: List[str], seq_len=100, mask_ratio=0.3, stride=None, noise_mask=None):
-        self.seq_len = seq_len
+    def __init__(
+        self,
+        files: List[str],
+        min_seq_len: int = 100,
+        max_seq_len: int = 3000,
+        mask_ratio: float = 0.3,
+        max_mask_blocks: int = 5,
+    ):
         self.files = files
+        self.min_seq_len = min_seq_len
+        self.max_seq_len = max_seq_len
         self.mask_ratio = mask_ratio
-        self.noise_mask = noise_mask
-        self.stride = stride if stride is not None else seq_len  # 💡 Store stride properly
-        self.samples = []
+        self.max_mask_blocks = max_mask_blocks
         self.chunk_index = []
-        
         self._index_volumes()
 
     def _index_volumes(self):
         for file_path in self.files:
             data = np.load(file_path, mmap_mode='r')
             volume_length = data.shape[0]
-            for start in range(0, volume_length - self.seq_len + 1, self.stride):
-                self.chunk_index.append((file_path, start))
 
-        
+            # Only index volumes large enough
+            if volume_length >= self.min_seq_len:
+                self.chunk_index.append((file_path, volume_length))
 
     def __len__(self):
         return len(self.chunk_index)
 
-
     def __getitem__(self, idx):
-        file_path, start_idx = self.chunk_index[idx]
-        data = np.load(file_path, mmap_mode='r')[start_idx:start_idx + self.seq_len]
+        file_path, volume_length = self.chunk_index[idx]
+        data = np.load(file_path, mmap_mode='r')
+
+        # Randomly sample a sequence length
+        seq_len = torch.randint(self.min_seq_len, min(volume_length, self.max_seq_len) + 1, (1,)).item()
+
+        # Random start position
+        start_idx = torch.randint(0, volume_length - seq_len + 1, (1,)).item()
+        data = data[start_idx:start_idx + seq_len]  # shape: (T, 20, 21)
+
         data = torch.tensor(data, dtype=torch.float32).unsqueeze(1)  # (T, 1, 20, 21)
-        
-        mask = torch.zeros(self.seq_len, dtype=torch.bool)
-        
-        # Use a generator seeded with true randomness
+        mask = torch.zeros(seq_len, dtype=torch.bool)
+
+        total_to_mask = int(seq_len * self.mask_ratio)
+
         g = torch.Generator()
         g.manual_seed(torch.randint(0, 2**32 - 1, (1,)).item())
 
-        total_to_mask = int(self.seq_len * self.mask_ratio)
-        block_size = max(1, total_to_mask)
+        remaining = total_to_mask
+        blocks = 0
+        while remaining > 0 and blocks < self.max_mask_blocks:
+            max_block_size = remaining
+            block_size = torch.randint(1, max_block_size + 1, (1,), generator=g).item()
+            start = torch.randint(0, seq_len - block_size + 1, (1,), generator=g).item()
 
-        start = torch.randint(0, self.seq_len - block_size + 1, (1,), generator=g).item()
-        mask[start:start + block_size] = True
+            # Ensure block doesn't overlap
+            if not mask[start:start + block_size].any():
+                mask[start:start + block_size] = True
+                remaining -= block_size
+                blocks += 1
 
         masked_data = data.clone()
-        masked_data[mask] = 0.0
+        masked_data[mask] = 0.0  # could use noise or learned tokens too
 
         return {
-            'input': masked_data,
-            'mask': mask,
-            'target': data,
+            'input': masked_data,   # shape: (T, 1, 20, 21)
+            'mask': mask,           # shape: (T,)
+            'target': data,         # original full data
+            'seq_len': seq_len,     # useful for batching if variable-length
         }
-
 
 if __name__ == "__main__":
     # sanity checks and visualizing
@@ -270,7 +288,7 @@ if __name__ == "__main__":
         print(labels)         # (B,)
         break
 
-    masked_temporal_dataset = MaskedMEGSequenceDataset(files = ["./data/processed_data/Intra/train/task_working_memory_105923_5.npy"], seq_len=10)
+    masked_temporal_dataset = MaskedMEGSequenceDataset(files = ["./data/processed_data/Intra/train/task_working_memory_105923_5.npy"], min_seq_len=100, max_seq_len=300, mask_ratio=0.3, max_mask_blocks=2)
     loader = torch.utils.data.DataLoader(masked_temporal_dataset, batch_size=40, shuffle=True)
 
     for volumes in loader:
@@ -285,12 +303,13 @@ if __name__ == "__main__":
         inputs = volumes["input"][0]     # (T, 1, 20, 21)
         targets = volumes["target"][0]   # (T, 1, 20, 21)
         mask = volumes["mask"][0]
-        print()
+        print(mask)
         break
 
-    T = inputs.shape[0]
+    T = min(10, inputs.shape[0])
 
     fig, axes = plt.subplots(2, T, figsize=(T * 2, 4))  # 2 rows: input + target
+
     for t in range(T):
         # Top row: input
         axes[0, t].imshow(inputs[t, 0], cmap='viridis')

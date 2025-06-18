@@ -41,8 +41,8 @@ split_idx = int(len(all_files) * 0.8)
 train_files = all_files[:split_idx]
 val_files = all_files[split_idx:]
 
-train_set = MaskedMEGSequenceDataset(files=train_files, seq_len=100, stride=25)
-val_set = MaskedMEGSequenceDataset(files=val_files, seq_len=100, stride=25)
+train_set = MaskedMEGSequenceDataset(files=train_files, max_seq_len=3000, min_seq_len=100, max_mask_blocks=2)
+val_set = MaskedMEGSequenceDataset(files=val_files, max_seq_len=3000, min_seq_len=100, max_mask_blocks=2)
 
 print(f"Train: {len(train_set)} samples\nVal: {len(val_set)} samples")
 
