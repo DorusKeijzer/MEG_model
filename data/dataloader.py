@@ -111,7 +111,7 @@ class MaskedNoisyCNNPretrainDataset(Dataset):
         if self.noise_mask is not None:
             masked = masked * self.noise_mask
 
-        noisy_masked = noise * masked
+        noisy_masked = (clean_frame + noise) * masked
 
         return clean_frame.unsqueeze(0), noisy_masked.unsqueeze(0)
 
