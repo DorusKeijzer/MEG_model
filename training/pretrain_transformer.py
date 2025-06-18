@@ -75,7 +75,6 @@ for epoch in range(EPOCHS):
         inputs = batch['input'].to(DEVICE)       # (B, T, 1, 20, 21)
         masks = batch['mask'].to(DEVICE)         # (B, T)
         targets = batch['target'].to(DEVICE)     # (B, T, 1, 20, 21)
-        print("Masked frames per sample:", masks.sum(dim=1).float().mean().item())
 
 
         _, embeddings = autoencoder(inputs)      # (B, T, D)
