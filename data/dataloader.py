@@ -209,6 +209,8 @@ class MaskedMEGSequenceDataset(Dataset):
         self.seq_len = seq_len
         self.mask_ratio = mask_ratio
         self.noise_mask = noise_mask
+        self.samples = []
+        self.chunk_index = []
 
         for task_group in ['Intra', 'Cross']:
             task_group_path = os.path.join(root_dir, task_group)
@@ -220,25 +222,25 @@ class MaskedMEGSequenceDataset(Dataset):
                     if file.endswith('.npy'):
                         self.samples.append(os.path.join(folder_path, file))
 
+    def _index_volumes(self, stride=None):
+        if stride is None:
+            stride = self.seq_len  # non-overlapping by default
+
+        for file_path in self.samples:
+            data = np.load(file_path, mmap_mode='r')
+            volume_length = data.shape[0]
+            for start in range(0, volume_length - self.seq_len + 1, stride):
+                self.chunk_index.append((file_path, start))
+
     def __len__(self):
         return len(self.samples)
-    
+
 
     def __getitem__(self, idx):
-        path = self.samples[idx]
-        data = np.load(path)  # (20, 21, T)
-        data = torch.tensor(data, dtype=torch.float32).unsqueeze(1)     # (T, 1, 20, 21)
-
-        assert data.shape[1:] == (1, 20, 21), f"Bad shape: {data.shape}"
-
-        if data.shape[0] < self.seq_len:
-            pad_len = self.seq_len - data.shape[0]
-            pad = torch.zeros(pad_len, 1, 20, 21)
-            data = torch.cat([data, pad], dim=0)
-        else:
-            start_idx = randint(0, data.shape[0] - self.seq_len)
-            data = data[start_idx:start_idx + self.seq_len]
-
+        file_path, start_idx = self.chunk_index[idx]
+        data = np.load(file_path, mmap_mode='r')[start_idx:start_idx + self.seq_len]
+        data = torch.tensor(data, dtype=torch.float32).unsqueeze(1)  # (T, 1, 20, 21)
+        
         mask = torch.rand(self.seq_len) < self.mask_ratio  # (T,)
         masked_data = data.clone()
         masked_data[mask] = 0.0
@@ -248,8 +250,6 @@ class MaskedMEGSequenceDataset(Dataset):
             'mask': mask,                 # (T,)
             'target': data,               # (T, 1, 20, 21)
         }
-
-
 
 
 if __name__ == "__main__":
