@@ -4,14 +4,11 @@ from datetime import datetime
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, random_split
 from tqdm import tqdm
 from data.dataloader import MEGVolumeDataset 
-from torch.utils.data import random_split
-
 from models.spatial_models import CNNFrameAutoencoder 
 from models.sequence_models import TemporalTransformer 
-
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import matplotlib.pyplot as plt
 import numpy as np
@@ -71,99 +68,106 @@ def main():
     print(f"Running ablation study from config: {args.config}")
 
     for run_idx, config in enumerate(experiment_configs["experiments"]):
-        print(f"\nRunning experiment {run_idx+1}/{len(experiment_configs['experiments'])}: {config['name']}")
+        repeats = config.get("repeats", 1)
 
-        # Setup device
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        for task_group_choice in ["Intra", "Cross"]:
+            exp_name = f"{config['name']}_{task_group_choice}"
+            print(f"\nExperiment {run_idx+1}/{len(experiment_configs['experiments'])}: {exp_name} — {repeats} repeat(s)")
 
-        # Model + Load Pretrained Weights if specified
-        model_cnn = CNNFrameAutoencoder(embed_dim=config["embed_dim"]).to(device)
-        model_transformer = TemporalTransformer(embed_dim=config["embed_dim"], num_classes=config["num_classes"]).to(device)
-        load_weights(model_cnn, model_transformer, config.get("cnn_weights"), config.get("transformer_weights"))
+            for repeat_idx in range(repeats):
+                print(f"\n--- Task: {task_group_choice} | Repeat {repeat_idx+1}/{repeats} ---")
 
-        # Dataset
-        dataset = MEGVolumeDataset(config["dataset_path"], mode='train')
-        train_size = int(config["train_split"] * len(dataset))
-        val_size = len(dataset) - train_size
-        train_set, val_set = random_split(dataset, [train_size, val_size])
-        train_loader = DataLoader(train_set, batch_size=config["batch_size"], shuffle=True, num_workers=2, pin_memory=True)
-        val_loader = DataLoader(val_set, batch_size=config["batch_size"], num_workers=2, pin_memory=True)
+                # Setup device
+                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        # Optimizer & Criterion
-        optimizer = optim.Adam(list(model_cnn.parameters()) + list(model_transformer.parameters()), lr=config["lr"])
-        criterion = nn.CrossEntropyLoss()
+                # Model + Load Pretrained Weights if specified
+                model_cnn = CNNFrameAutoencoder(embed_dim=config["embed_dim"]).to(device)
+                model_transformer = TemporalTransformer(embed_dim=config["embed_dim"], num_classes=config["num_classes"]).to(device)
+                load_weights(model_cnn, model_transformer, config.get("cnn_weights"), config.get("transformer_weights"))
 
-        # Train loop (can extract this into a func later)
-        metrics = {
-            "train_loss": [], "train_acc": [], "train_recall": [], "train_f1": [], "train_prec": [],
-            "val_loss": [], "val_acc": [], "val_recall": [], "val_f1": [], "val_prec": []
-        }
+                # Dataset for current task group
+                dataset = MEGVolumeDataset(config["dataset_path"], mode='train', task_group_choice=task_group_choice)
+                train_size = int(config["train_split"] * len(dataset))
+                val_size = len(dataset) - train_size
+                train_set, val_set = random_split(dataset, [train_size, val_size])
+                train_loader = DataLoader(train_set, batch_size=config["batch_size"], shuffle=True, num_workers=2, pin_memory=True)
+                val_loader = DataLoader(val_set, batch_size=config["batch_size"], num_workers=2, pin_memory=True)
 
-        best_val_loss = float('inf')
-        wait, patience = 0, config.get("patience", 5)
+                # Optimizer & Criterion
+                optimizer = optim.Adam(list(model_cnn.parameters()) + list(model_transformer.parameters()), lr=config["lr"])
+                criterion = nn.CrossEntropyLoss()
 
-        for epoch in range(config["num_epochs"]):
-            print(f"\nEpoch {epoch+1}/{config['num_epochs']} for run: {config['name']}")
-            model_cnn.train()
-            model_transformer.train()
-            
-            train_loss, all_preds, all_labels = 0.0, [], []
-            for x, y in tqdm(train_loader):
-                x, y = x.to(device), y.to(device)
-                _, z = model_cnn(x)
-                logits = model_transformer(z)
+                # Train loop
+                metrics = {
+                    "train_loss": [], "train_acc": [], "train_recall": [], "train_f1": [], "train_prec": [],
+                    "val_loss": [], "val_acc": [], "val_recall": [], "val_f1": [], "val_prec": []
+                }
 
-                loss = criterion(logits, y)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                best_val_loss = float('inf')
+                wait, patience = 0, config.get("patience", 5)
 
-                train_loss += loss.item()
-                preds = torch.argmax(logits, dim=1)
-                all_preds.extend(preds.cpu().numpy())
-                all_labels.extend(y.cpu().numpy())
+                for epoch in range(config["num_epochs"]):
+                    print(f"\nEpoch {epoch+1}/{config['num_epochs']} for run: {exp_name}, repeat: {repeat_idx+1}")
+                    model_cnn.train()
+                    model_transformer.train()
+                    
+                    train_loss, all_preds, all_labels = 0.0, [], []
+                    for x, y in tqdm(train_loader):
+                        x, y = x.to(device), y.to(device)
+                        _, z = model_cnn(x)
+                        logits = model_transformer(z)
 
-            # Log Train Metrics
-            train_loss /= len(train_loader)
-            metrics["train_loss"].append(train_loss)
-            metrics["train_acc"].append(accuracy_score(all_labels, all_preds))
-            metrics["train_prec"].append(precision_score(all_labels, all_preds, average="macro"))
-            metrics["train_recall"].append(recall_score(all_labels, all_preds, average="macro"))
-            metrics["train_f1"].append(f1_score(all_labels, all_preds, average="macro"))
+                        loss = criterion(logits, y)
+                        optimizer.zero_grad()
+                        loss.backward()
+                        optimizer.step()
 
-            # Eval
-            val_loss, val_acc, val_recall, val_f1, val_prec = evaluate(
-                model_cnn, model_transformer, val_loader, criterion, device
-            )
-            metrics["val_loss"].append(val_loss)
-            metrics["val_acc"].append(val_acc)
-            metrics["val_recall"].append(val_recall)
-            metrics["val_prec"].append(val_prec)
-            metrics["val_f1"].append(val_f1)
+                        train_loss += loss.item()
+                        preds = torch.argmax(logits, dim=1)
+                        all_preds.extend(preds.cpu().numpy())
+                        all_labels.extend(y.cpu().numpy())
 
-            print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Acc: {val_acc:.4f} | F1: {val_f1:.4f}")
+                    # Log Train Metrics
+                    train_loss /= len(train_loader)
+                    metrics["train_loss"].append(train_loss)
+                    metrics["train_acc"].append(accuracy_score(all_labels, all_preds))
+                    metrics["train_prec"].append(precision_score(all_labels, all_preds, average="macro"))
+                    metrics["train_recall"].append(recall_score(all_labels, all_preds, average="macro"))
+                    metrics["train_f1"].append(f1_score(all_labels, all_preds, average="macro"))
 
-            # Early Stop
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                wait = 0
-                torch.save({
-                    'cnn_state_dict': model_cnn.state_dict(),
-                    'transformer_state_dict': model_transformer.state_dict(),
-                }, os.path.join(config["save_dir"], f"{config['name']}_best_model.pt"))
-                print("Best model saved!")
-            else:
-                wait += 1
-                if wait >= patience:
-                    print("Early stopping triggered.")
-                    break
+                    # Eval
+                    val_loss, val_acc, val_recall, val_f1, val_prec = evaluate(
+                        model_cnn, model_transformer, val_loader, criterion, device
+                    )
+                    metrics["val_loss"].append(val_loss)
+                    metrics["val_acc"].append(val_acc)
+                    metrics["val_recall"].append(val_recall)
+                    metrics["val_prec"].append(val_prec)
+                    metrics["val_f1"].append(val_f1)
 
-        # Save final metrics
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        json_save_path = os.path.join(config["save_dir"], f"{config['name']}_metrics_{timestamp}.json")
-        save_metrics_json(metrics, json_save_path)
+                    print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Acc: {val_acc:.4f} | F1: {val_f1:.4f}")
 
-        print(f"Finished run: {config['name']}, results saved to {json_save_path}")
+                    # Early Stop
+                    if val_loss < best_val_loss:
+                        best_val_loss = val_loss
+                        wait = 0
+                        torch.save({
+                            'cnn_state_dict': model_cnn.state_dict(),
+                            'transformer_state_dict': model_transformer.state_dict(),
+                        }, os.path.join(config["save_dir"], f"{exp_name}_run{repeat_idx}_best_model.pt"))
+                        print("Best model saved!")
+                    else:
+                        wait += 1
+                        if wait >= patience:
+                            print("Early stopping triggered.")
+                            break
+
+                # Save final metrics per repeat and task group
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                json_save_path = os.path.join(config["save_dir"], f"{exp_name}_metrics_run{repeat_idx}_{timestamp}.json")
+                save_metrics_json(metrics, json_save_path)
+
+                print(f"Finished run: {exp_name}, repeat: {repeat_idx+1}, results saved to {json_save_path}")
 
 
 if __name__ == "__main__":
