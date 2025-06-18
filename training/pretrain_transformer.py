@@ -15,7 +15,7 @@ from models.sequence_models import TransformerWithDecoder
 import random
 
 
-BATCH_SIZE = 64
+BATCH_SIZE = 4
 EPOCHS = 50
 LR = 1e-3
 PATIENCE = 5
