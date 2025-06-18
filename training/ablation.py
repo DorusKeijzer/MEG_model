@@ -5,14 +5,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 from data.dataloader import MEGVolumeDataset 
 from torch.utils.data import random_split
 
 from models.spatial_models import CNNFrameAutoencoder 
 from models.sequence_models import TemporalTransformer 
-
-
-
 
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import matplotlib.pyplot as plt
@@ -65,10 +63,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='configs/ablation_configs.json',
                         help="Path to ablation config JSON")
+
     args = parser.parse_args()
 
     with open(args.config, 'r') as f:
         experiment_configs = json.load(f)
+    print(f"Running ablation study from config: {args.config}")
 
     for run_idx, config in enumerate(experiment_configs["experiments"]):
         print(f"\nRunning experiment {run_idx+1}/{len(experiment_configs['experiments'])}: {config['name']}")
@@ -106,9 +106,9 @@ def main():
             print(f"\nEpoch {epoch+1}/{config['num_epochs']} for run: {config['name']}")
             model_cnn.train()
             model_transformer.train()
-
+            
             train_loss, all_preds, all_labels = 0.0, [], []
-            for x, y in train_loader:
+            for x, y in tqdm(train_loader):
                 x, y = x.to(device), y.to(device)
                 _, z = model_cnn(x)
                 logits = model_transformer(z)
@@ -165,3 +165,6 @@ def main():
 
         print(f"Finished run: {config['name']}, results saved to {json_save_path}")
 
+
+if __name__ == "__main__":
+    main()
